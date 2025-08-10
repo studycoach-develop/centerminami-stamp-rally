@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>塾 de スタンプラリー</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+        }
+        .calendar-day {
+            transition: all 0.3s ease;
+        }
+        .calendar-day.checked {
+            background-color: #fef08a; /* 黄色 */
+            color: #b45309;
+            font-weight: 800;
+            border-radius: 50%;
+            position: relative;
+        }
+        .calendar-day.checked::after {
+            content: '✔';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5em;
+            color: #f59e0b;
+        }
+        .calendar-day.today {
+            border: 2px solid #3b82f6;
+        }
+        .btn-shine {
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-shine::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: rgba(255, 255, 255, 0.4);
+            transform: rotate(45deg);
+            transition: all 0.5s ease;
+            opacity: 0;
+        }
+        .btn-shine:hover::after {
+            left: 100%;
+            opacity: 1;
+            transition: all 0.5s ease;
+        }
+        #lottery-modal[data-result="win"] #win-content,
+        #lottery-modal[data-result="lose"] #lose-content {
+            display: block;
+        }
+        #lottery-modal #win-content,
+        #lottery-modal #lose-content {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-blue-50 flex items-center justify-center min-h-screen">
+
+    <div id="app-container" class="w-full max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8">
+
+        <!-- ログイン画面 -->
+        <div id="login-screen">
+            <h1 class="text-3xl font-extrabold text-center text-blue-600 mb-2">塾 de スタンプラリー</h1>
+            <p class="text-center text-gray-500 mb-8">IDとパスワードでログインしてね！</p>
+            <div class="space-y-4">
+                <input type="text" id="username" placeholder="ID" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors">
+                <input type="password" id="password" placeholder="パスワード" class="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors">
+            </div>
+            <button onclick="login()" class="w-full mt-8 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-all duration-300 transform hover:scale-105 btn-shine">ログイン</button>
+            <p id="login-error" class="text-red-500 text-center mt-4 h-5"></p>
+        </div>
+
+        <!-- メイン画面 -->
+        <div id="main-screen" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800">こんにちは、<span id="user-name"></span> さん！</h2>
+                    <p class="text-gray-500">今日もがんばろう！</p>
+                </div>
+                <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500 transition-colors">ログアウト</button>
+            </div>
+
+            <div class="bg-blue-100 rounded-lg p-4 mb-6 text-center">
+                <p class="text-blue-800">現在の合計登校日数</p>
+                <p class="text-4xl font-extrabold text-blue-600"><span id="login-count">0</span> 日</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <button id="toko-btn" onclick="recordAttendance('toko')" class="bg-green-500 text-white font-bold py-4 rounded-lg hover:bg-green-600 transition-all duration-300 transform hover:scale-105 btn-shine">登校したよ！</button>
+                <button id="geko-btn" onclick="recordAttendance('geko')" class="bg-orange-500 text-white font-bold py-4 rounded-lg hover:bg-orange-600 transition-all duration-300 transform hover:scale-105 btn-shine" disabled>下校します</button>
+            </div>
+
+            <!-- カレンダー -->
+            <div id="calendar" class="bg-gray-50 p-4 rounded-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <button id="prev-month" class="text-gray-600 hover:text-blue-500">&lt;</button>
+                    <h3 id="calendar-header" class="text-lg font-bold text-gray-700"></h3>
+                    <button id="next-month" class="text-gray-600 hover:text-blue-500">&gt;</button>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center">
+                    <!-- 日付がここに生成される -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 抽選モーダル -->
+    <div id="lottery-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center transform transition-all scale-95 opacity-0">
+            <!-- 当たり表示 -->
+            <div id="win-content">
+                <h2 class="text-5xl font-extrabold text-red-500 mb-4 animate-bounce">あたり！</h2>
+                <p class="text-yellow-500 text-8xl mb-4">🎉</p>
+                <p class="text-gray-700 text-lg mb-6">おめでとう！すごいね！</p>
+            </div>
+            <!-- はずれ表示 -->
+            <div id="lose-content">
+                <h2 class="text-5xl font-extrabold text-blue-500 mb-4">ざんねん！</h2>
+                 <p class="text-blue-400 text-8xl mb-4">💧</p>
+                <p class="text-gray-700 text-lg mb-6">また明日チャレンジしてね！</p>
+            </div>
+            <button onclick="closeLottery()" class="w-full mt-4 bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 transition-colors">とじる</button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- 設定 ---
+        // Google Apps ScriptのデプロイURLをここに貼り付けてください
+        const GAS_URL = 'YOUR_GOOGLE_APPS_SCRIPT_URL'; 
+
+        // --- グローバル変数 ---
+        let currentUser = null;
+        let currentMonth = new Date();
+        let attendanceDates = [];
+
+        // --- DOM要素 ---
+        const loginScreen = document.getElementById('login-screen');
+        const mainScreen = document.getElementById('main-screen');
+        const loginError = document.getElementById('login-error');
+        const userNameEl = document.getElementById('user-name');
+        const loginCountEl = document.getElementById('login-count');
+        const tokoBtn = document.getElementById('toko-btn');
+        const gekoBtn = document.getElementById('geko-btn');
+        const lotteryModal = document.getElementById('lottery-modal');
+
+        // --- 関数 ---
+
+        /**
+         * ログイン処理
+         */
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            loginError.textContent = 'ログイン中...';
+
+            if (!username || !password) {
+                loginError.textContent = 'IDとパスワードを入力してください。';
+                return;
+            }
+
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'login', username, password })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    currentUser = result.user;
+                    attendanceDates = result.attendanceDates || [];
+                    userNameEl.textContent = currentUser.name;
+                    loginCountEl.textContent = attendanceDates.length;
+                    
+                    loginScreen.classList.add('hidden');
+                    mainScreen.classList.remove('hidden');
+                    
+                    updateCalendar();
+                    updateButtonState();
+                    loginError.textContent = '';
+                } else {
+                    loginError.textContent = result.message || 'ログインに失敗しました。';
+                }
+            } catch (error) {
+                console.error('Login Error:', error);
+                loginError.textContent = '通信エラーが発生しました。';
+            }
+        }
+
+        /**
+         * ログアウト処理
+         */
+        function logout() {
+            currentUser = null;
+            attendanceDates = [];
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            mainScreen.classList.add('hidden');
+            loginScreen.classList.remove('hidden');
+        }
+
+        /**
+         * 登下校記録と抽選
+         * @param {string} type 'toko' or 'geko'
+         */
+        async function recordAttendance(type) {
+            const button = type === 'toko' ? tokoBtn : gekoBtn;
+            button.disabled = true;
+            button.textContent = '記録中...';
+
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'recordAttendance', userId: currentUser.id, type })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    if (type === 'toko') {
+                        attendanceDates = result.attendanceDates;
+                        loginCountEl.textContent = attendanceDates.length;
+                        showLotteryResult(result.lotteryResult);
+                    }
+                    updateCalendar();
+                    updateButtonState();
+                } else {
+                    alert(result.message || '記録に失敗しました。');
+                }
+            } catch (error) {
+                console.error('Attendance Error:', error);
+                alert('通信エラーが発生しました。');
+            } finally {
+                button.textContent = type === 'toko' ? '登校したよ！' : '下校します';
+            }
+        }
+        
+        /**
+         * ボタンの状態を更新
+         */
+        function updateButtonState() {
+            const today = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+            const hasAttendedToday = attendanceDates.includes(today);
+            
+            tokoBtn.disabled = hasAttendedToday;
+            gekoBtn.disabled = !hasAttendedToday;
+        }
+
+        /**
+         * 抽選結果モーダルを表示
+         * @param {string} result 'win' or 'lose'
+         */
+        function showLotteryResult(result) {
+            lotteryModal.dataset.result = result;
+            lotteryModal.classList.remove('hidden');
+            setTimeout(() => {
+                lotteryModal.querySelector('div').classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        /**
+         * 抽選結果モーダルを閉じる
+         */
+        function closeLottery() {
+            lotteryModal.querySelector('div').classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                lotteryModal.classList.add('hidden');
+            }, 300);
+        }
+
+        /**
+         * カレンダーの表示を更新
+         */
+        function updateCalendar() {
+            const calendarHeader = document.getElementById('calendar-header');
+            const calendarGrid = document.getElementById('calendar-grid');
+            calendarGrid.innerHTML = '';
+
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+
+            calendarHeader.textContent = `${year}年 ${month + 1}月`;
+
+            // 曜日のヘッダー
+            const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+            weekdays.forEach(day => {
+                const dayEl = document.createElement('div');
+                dayEl.textContent = day;
+                dayEl.className = 'font-bold text-sm text-gray-500';
+                if (day === '日') dayEl.classList.add('text-red-500');
+                if (day === '土') dayEl.classList.add('text-blue-500');
+                calendarGrid.appendChild(dayEl);
+            });
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const today = new Date();
+
+            // 空白の日
+            for (let i = 0; i < firstDay; i++) {
+                calendarGrid.appendChild(document.createElement('div'));
+            }
+
+            // 日付
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dayEl = document.createElement('div');
+                dayEl.textContent = i;
+                dayEl.className = 'p-2 calendar-day';
+
+                const currentDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                
+                if (attendanceDates.includes(currentDateStr)) {
+                    dayEl.classList.add('checked');
+                }
+                
+                if (year === today.getFullYear() && month === today.getMonth() && i === today.getDate()) {
+                    dayEl.classList.add('today');
+                }
+                
+                calendarGrid.appendChild(dayEl);
+            }
+        }
+        
+        // --- イベントリスナー ---
+        document.getElementById('prev-month').addEventListener('click', () => {
+            currentMonth.setMonth(currentMonth.getMonth() - 1);
+            updateCalendar();
+        });
+
+        document.getElementById('next-month').addEventListener('click', () => {
+            currentMonth.setMonth(currentMonth.getMonth() + 1);
+            updateCalendar();
+        });
+        
+        // パスワード入力欄でEnterキーを押したらログイン
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+
+    </script>
+</body>
+</html>
