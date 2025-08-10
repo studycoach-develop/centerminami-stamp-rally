@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スタンプラリー</title>
+    <title>塾 de スタンプラリー</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
     <style>
@@ -42,10 +42,23 @@
                 <div><h2 class="text-2xl font-bold text-gray-800">こんにちは、<span id="user-name"></span> さん！</h2><p class="text-gray-500">今日もがんばろう！</p></div>
                 <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500 transition-colors">ログアウト</button>
             </div>
-            <div class="bg-blue-100 rounded-lg p-4 mb-6 text-center"><p class="text-blue-800">現在の合計登校日数</p><p class="text-4xl font-extrabold text-blue-600"><span id="login-count">0</span> 日</p></div>
+            
+            <!-- ★★★ ここから表示エリアを追加 ★★★ -->
             <div class="grid grid-cols-2 gap-4 mb-6">
-                <button id="toko-btn" onclick="recordAttendance('toko')" class="bg-green-500 text-white font-bold py-4 rounded-lg hover:bg-green-600 transition-all duration-300 transform hover:scale-105 btn-shine">登校する</button>
-                <button id="geko-btn" onclick="recordAttendance('geko')" class="bg-orange-500 text-white font-bold py-4 rounded-lg hover:bg-orange-600 transition-all duration-300 transform hover:scale-105 btn-shine" disabled>下校する</button>
+                <div class="bg-blue-100 rounded-lg p-4 text-center">
+                    <p class="text-blue-800 text-sm">合計登校日数</p>
+                    <p class="text-3xl font-extrabold text-blue-600"><span id="login-count">0</span> 日</p>
+                </div>
+                <div class="bg-yellow-100 rounded-lg p-4 text-center">
+                    <p class="text-yellow-800 text-sm">景品交換チケット</p>
+                    <p class="text-3xl font-extrabold text-yellow-600"><span id="prize-ticket-count">0</span> 枚</p>
+                </div>
+            </div>
+            <!-- ★★★ ここまで ★★★ -->
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <button id="toko-btn" onclick="recordAttendance('toko')" class="bg-green-500 text-white font-bold py-4 rounded-lg hover:bg-green-600 transition-all duration-300 transform hover:scale-105 btn-shine">登校したよ！</button>
+                <button id="geko-btn" onclick="recordAttendance('geko')" class="bg-orange-500 text-white font-bold py-4 rounded-lg hover:bg-orange-600 transition-all duration-300 transform hover:scale-105 btn-shine" disabled>下校します</button>
             </div>
             <div id="calendar" class="bg-gray-50 p-4 rounded-lg">
                 <div class="flex justify-between items-center mb-4"><button id="prev-month" class="text-gray-600 hover:text-blue-500">&lt;</button><h3 id="calendar-header" class="text-lg font-bold text-gray-700"></h3><button id="next-month" class="text-gray-600 hover:text-blue-500">&gt;</button></div>
@@ -57,7 +70,7 @@
     <!-- 抽選モーダル -->
     <div id="lottery-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50">
         <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center transform transition-all scale-95 opacity-0">
-            <div id="win-content"><h2 class="text-5xl font-extrabold text-red-500 mb-4 animate-bounce">あたり！</h2><p class="text-yellow-500 text-8xl mb-4">🎉</p><p class="text-gray-700 text-lg mb-6">おめでとう！すごいね！</p></div>
+            <div id="win-content"><h2 class="text-5xl font-extrabold text-red-500 mb-4 animate-bounce">あたり！</h2><p class="text-yellow-500 text-8xl mb-4">🎉</p><p class="text-gray-700 text-lg mb-6">おめでとう！景品チケットを1枚ゲット！</p></div>
             <div id="lose-content"><h2 class="text-5xl font-extrabold text-blue-500 mb-4">ざんねん！</h2><p class="text-blue-400 text-8xl mb-4">💧</p><p class="text-gray-700 text-lg mb-6">また明日チャレンジしてね！</p></div>
             <button onclick="closeLottery()" class="w-full mt-4 bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 transition-colors">とじる</button>
         </div>
@@ -65,7 +78,7 @@
 
     <script>
         // --- 設定 ---
-        const GAS_URL = 'https://script.google.com/macros/s/AKfycbzNn_KvGcsCYnuV_QbwdbSLu9KfAYYz5SVyEFJxa2uKh7bh5abAtfcd1T2ByFgiUys/exec'; // GASのデプロイURL
+        const GAS_URL = 'YOUR_GOOGLE_APPS_SCRIPT_URL'; // GASのデプロイURL
 
         // --- グローバル変数 ---
         let currentUser = null;
@@ -78,13 +91,14 @@
         const loginError = document.getElementById('login-error');
         const userNameEl = document.getElementById('user-name');
         const loginCountEl = document.getElementById('login-count');
+        const prizeTicketCountEl = document.getElementById('prize-ticket-count'); // ★追加
         const tokoBtn = document.getElementById('toko-btn');
         const gekoBtn = document.getElementById('geko-btn');
         const lotteryModal = document.getElementById('lottery-modal');
 
         // --- JSONP通信関数 ---
         function jsonpRequest(url, callbackName, callback) {
-            window[callbackName] = callback; // グローバルに関数を設定
+            window[callbackName] = callback;
             const script = document.createElement('script');
             script.src = url;
             document.body.appendChild(script);
@@ -100,7 +114,7 @@
         }
 
         /**
-         * ログイン処理
+         * ログイン処理【景品枚数表示を追加】
          */
         function login() {
             const username = document.getElementById('username').value;
@@ -121,6 +135,7 @@
                     attendanceDates = result.attendanceDates || [];
                     userNameEl.textContent = currentUser.name;
                     loginCountEl.textContent = attendanceDates.length;
+                    prizeTicketCountEl.textContent = result.prizeTickets || 0; // ★追加
                     
                     loginScreen.classList.add('hidden');
                     mainScreen.classList.remove('hidden');
@@ -147,7 +162,7 @@
         }
 
         /**
-         * 登下校記録と抽選
+         * 登下校記録と抽選【景品枚数更新を追加】
          */
         function recordAttendance(type) {
             const button = type === 'toko' ? tokoBtn : gekoBtn;
@@ -162,6 +177,12 @@
                     if (type === 'toko') {
                         attendanceDates = result.attendanceDates;
                         loginCountEl.textContent = attendanceDates.length;
+                        
+                        // ★追加：当たった場合に画面の枚数も増やす
+                        if (result.lotteryResult === 'win') {
+                            const currentTickets = parseInt(prizeTicketCountEl.textContent, 10);
+                            prizeTicketCountEl.textContent = currentTickets + 1;
+                        }
                         showLotteryResult(result.lotteryResult);
                     }
                     updateCalendar();
