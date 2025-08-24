@@ -84,17 +84,21 @@
     <script>
         // --- 設定 ---
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbyZRIcKLrM7Y_IxxnjdKb_vFjn9eij2w6lIq7g9lgR90NQHPFF8iomS1TTWVB18M8f5/exec'; // 【重要】ご自身のGASのURLに書き換えてください
-        const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=...'; // 必要に応じて書き換えてください
+        const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=...';
 
         // --- グローバル変数 ---
         let currentUser = null;
         let currentMonth = new Date();
         let attendanceDates = [];
         let hasLeftToday = false;
+        let lastCheckedDate = null; // 日付変更チェック用
+        let loginExpiryTimestamp = null; // ▼▼▼【追加】ログイン有効期限のタイムスタンプ
+        let expiryTimer = null; // ▼▼▼【追加】自動ログアウト用のタイマーID
 
         // --- DOM要素 ---
         const loginScreen = document.getElementById('login-screen');
         const mainScreen = document.getElementById('main-screen');
+        // ... (その他のDOM要素の定義は変更なし) ...
         const loginError = document.getElementById('login-error');
         const userNameEl = document.getElementById('user-name');
         const loginCountEl = document.getElementById('login-count');
@@ -140,65 +144,76 @@
 
             if (result.announcements && result.announcements.length > 0) {
                 let announcementsHtml = '<h3 class="text-xl font-bold text-gray-800 border-b-2 pb-2 mb-2">📢 お知らせ</h3>';
-                
                 result.announcements.forEach(ann => {
                     const safeTitle = ann.title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                     const safeContent = ann.content.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-                    announcementsHtml += `
-                        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg shadow-sm">
-                            <h4 class="font-bold text-yellow-900">${safeTitle}</h4>
-                            <p class="text-gray-700 mt-1 text-sm">${safeContent}</p>
-                        </div>
-                    `;
+                    announcementsHtml += `<div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg shadow-sm"><h4 class="font-bold text-yellow-900">${safeTitle}</h4><p class="text-gray-700 mt-1 text-sm">${safeContent}</p></div>`;
                 });
                 announcementsContainer.innerHTML = announcementsHtml;
             }
+            
+            lastCheckedDate = new Date().toLocaleDateString();
+
+            // ▼▼▼【追加】ログイン有効期限タイマーを開始
+            if (result.expiryTimestamp) {
+                loginExpiryTimestamp = result.expiryTimestamp;
+                startExpiryTimer();
+            }
+            // ▲▲▲【追加】ここまで
 
             updateCalendar();
             updateButtonState();
             loginError.textContent = '';
         }
 
-        function generateDynamicStudyPlusUrl() {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() + 5);
-            const expiresAt = now.toISOString();
-            return `${STUDY_PLUS_BASE_URL}&expires_at=${encodeURIComponent(expiresAt)}`;
-        }
-        
-        function redirectToStudyPlus() {
-            window.location.href = generateDynamicStudyPlusUrl();
-        }
+        // ▼▼▼【新規追加】ここから（ログイン有効期限タイマー機能）▼▼▼
+        function startExpiryTimer() {
+            // 既存のタイマーがあればクリア
+            if (expiryTimer) {
+                clearInterval(expiryTimer);
+            }
 
-        function jsonpRequest(url, callbackName, callback) {
-            window[callbackName] = callback;
-            const script = document.createElement('script');
-            script.src = url;
-            document.body.appendChild(script);
-            script.onload = () => { document.body.removeChild(script); delete window[callbackName]; };
-            script.onerror = () => { loginError.textContent = '通信エラーが発生しました。'; document.body.removeChild(script); delete window[callbackName]; };
-        }
-
-        function login() {
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            loginError.textContent = 'ログイン中...';
-            if (!username || !password) { loginError.textContent = 'IDとパスワードを入力してください。'; return; }
-
-            const callbackName = 'loginCallback';
-            const url = `${GAS_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&callback=${callbackName}`;
-            
-            jsonpRequest(url, callbackName, (result) => {
-                if (result.success) {
-                    showMainScreen(result);
-                } else {
-                    loginError.textContent = result.message || 'ログインに失敗しました。';
+            expiryTimer = setInterval(() => {
+                if (!loginExpiryTimestamp) {
+                    clearInterval(expiryTimer);
+                    return;
                 }
-            });
+
+                const now = new Date().getTime();
+                if (now > loginExpiryTimestamp) {
+                    alert("セッションの有効期限が切れました。再度ログインしてください。");
+                    logout(); // タイマーのクリアも内部で行われる
+                }
+            }, 1000); // 1秒ごとにチェック
         }
+        // ▲▲▲【新規追加】ここまで ▲▲▲
+
+        // ▼▼▼【新規追加】ここから（日付変更時の自動ログアウト機能）▼▼▼
+        function checkDateAndLogout() {
+            if (!currentUser) return;
+            const today = new Date().toLocaleDateString();
+            if (lastCheckedDate === null) lastCheckedDate = today;
+            if (lastCheckedDate !== today) {
+                alert("日付が変わりました。再度ログインしてください。");
+                logout();
+            }
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                checkDateAndLogout();
+            }
+        });
+        // ▲▲▲【新規追加】ここまで ▲▲▲
+
 
         function logout() {
+            // ▼▼▼【追加】タイマーを停止
+            if (expiryTimer) {
+                clearInterval(expiryTimer);
+            }
+            loginExpiryTimestamp = null;
+            // ▲▲▲【追加】ここまで
+
             currentUser = null;
             attendanceDates = [];
             hasLeftToday = false;
@@ -208,14 +223,50 @@
             loginScreen.classList.remove('hidden');
         }
 
+        // --- その他の関数 (変更なし) ---
+        function generateDynamicStudyPlusUrl() {
+            // ... (変更なし) ...
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + 5);
+            const expiresAt = now.toISOString();
+            return `${STUDY_PLUS_BASE_URL}&expires_at=${encodeURIComponent(expiresAt)}`;
+        }
+        function redirectToStudyPlus() {
+            // ... (変更なし) ...
+            window.location.href = generateDynamicStudyPlusUrl();
+        }
+        function jsonpRequest(url, callbackName, callback) {
+            // ... (変更なし) ...
+            window[callbackName] = callback;
+            const script = document.createElement('script');
+            script.src = url;
+            document.body.appendChild(script);
+            script.onload = () => { document.body.removeChild(script); delete window[callbackName]; };
+            script.onerror = () => { loginError.textContent = '通信エラーが発生しました。'; document.body.removeChild(script); delete window[callbackName]; };
+        }
+        function login() {
+            // ... (変更なし) ...
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            loginError.textContent = 'ログイン中...';
+            if (!username || !password) { loginError.textContent = 'IDとパスワードを入力してください。'; return; }
+            const callbackName = 'loginCallback';
+            const url = `${GAS_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&callback=${callbackName}`;
+            jsonpRequest(url, callbackName, (result) => {
+                if (result.success) {
+                    showMainScreen(result);
+                } else {
+                    loginError.textContent = result.message || 'ログインに失敗しました。';
+                }
+            });
+        }
         function recordAttendance(type) {
+            // ... (変更なし) ...
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
             button.textContent = '記録中...';
-
             const callbackName = 'attendanceCallback';
             const url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
-
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
                     if (type === 'toko') {
@@ -238,22 +289,21 @@
                 button.textContent = type === 'toko' ? '登校する' : '下校する';
             });
         }
-        
         function updateButtonState() {
+            // ... (変更なし) ...
             const todayStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
             const hasAttendedToday = attendanceDates.includes(todayStr);
-            
             tokoBtn.disabled = hasAttendedToday;
             gekoBtn.disabled = !hasAttendedToday || hasLeftToday;
         }
-
         function showLotteryResult(result) {
+            // ... (変更なし) ...
             lotteryModal.dataset.result = result;
             lotteryModal.classList.remove('hidden');
             setTimeout(() => { lotteryModal.querySelector('div').classList.remove('scale-95', 'opacity-0'); }, 10);
         }
-
         function closeLottery() {
+            // ... (変更なし) ...
             lotteryModal.querySelector('div').classList.add('scale-95', 'opacity-0');
             setTimeout(() => {
                 lotteryModal.classList.add('hidden');
@@ -262,8 +312,8 @@
                 redirectToStudyPlus();
             }, 300);
         }
-
         function updateCalendar() {
+            // ... (変更なし) ...
             const calendarHeader = document.getElementById('calendar-header');
             const calendarGrid = document.getElementById('calendar-grid');
             calendarGrid.innerHTML = '';
