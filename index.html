@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- ★修正：ページのタイトルを変更 -->
     <title>センター南校 登校スタンプラリー</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
@@ -25,9 +24,7 @@
 <body class="bg-blue-50 flex items-center justify-center min-h-screen">
 
     <div id="app-container" class="w-full max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8">
-        <!-- ログイン画面 -->
         <div id="login-screen">
-            <!-- ★修正：タイトルを変更し、<br>で改行 -->
             <h1 class="text-3xl font-extrabold text-center text-blue-600 mb-2 leading-tight">センター南校<br>登校スタンプラリー</h1>
             <p class="text-center text-gray-500 mb-8">IDとパスワードでログインしてね！</p>
             <div class="space-y-4">
@@ -38,7 +35,6 @@
             <p id="login-error" class="text-red-500 text-center mt-4 h-5"></p>
         </div>
 
-        <!-- メイン画面 -->
         <div id="main-screen" class="hidden">
             <div class="flex justify-between items-center mb-6">
                 <div><h2 class="text-2xl font-bold text-gray-800">こんにちは、<span id="user-name"></span> さん！</h2><p class="text-gray-500">今日もがんばろう！</p></div>
@@ -57,7 +53,6 @@
             </div>
 
             <div class="grid grid-cols-2 gap-4 mb-6">
-                <!-- ★修正：ボタンのテキストを変更 -->
                 <button id="toko-btn" onclick="recordAttendance('toko')" class="bg-green-500 text-white font-bold py-4 rounded-lg hover:bg-green-600 transition-all duration-300 transform hover:scale-105 btn-shine disabled:opacity-50 disabled:cursor-not-allowed">登校する</button>
                 <button id="geko-btn" onclick="recordAttendance('geko')" class="bg-orange-500 text-white font-bold py-4 rounded-lg hover:bg-orange-600 transition-all duration-300 transform hover:scale-105 btn-shine disabled:opacity-50 disabled:cursor-not-allowed">下校する</button>
             </div>
@@ -75,7 +70,6 @@
         </div>
     </div>
 
-    <!-- 抽選モーダル -->
     <div id="lottery-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50">
         <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center transform transition-all scale-95 opacity-0">
             <div id="win-content"><h2 class="text-5xl font-extrabold text-red-500 mb-4 animate-bounce">あたり！</h2><p class="text-yellow-500 text-8xl mb-4">🎉</p><p class="text-gray-700 text-lg mb-6">おめでとう！景品チケットを1枚ゲット！</p></div>
@@ -106,6 +100,46 @@
         const gekoBtn = document.getElementById('geko-btn');
         const lotteryModal = document.getElementById('lottery-modal');
         const studyPlusLinkBtn = document.getElementById('study-plus-link');
+
+        // ▼▼▼【新規追加】QRコード経由のログイン処理 ▼▼▼
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const qrLoginDataStr = urlParams.get('qr_login_data');
+
+            if (qrLoginDataStr) {
+                try {
+                    const decodedData = decodeURIComponent(qrLoginDataStr);
+                    const result = JSON.parse(decodedData);
+                    
+                    // ログイン成功後の処理を実行
+                    showMainScreen(result);
+
+                    // URLからパラメータを削除して履歴に残さないようにする
+                    window.history.replaceState(null, '', window.location.pathname);
+                } catch (e) {
+                    console.error("QRログインデータの解析に失敗しました。", e);
+                    loginError.textContent = "QRコードのログイン情報が正しくありません。";
+                }
+            }
+        });
+
+        function showMainScreen(result) {
+            currentUser = result.user;
+            attendanceDates = result.attendanceDates || [];
+            hasLeftToday = result.hasLeftToday || false;
+            
+            userNameEl.textContent = currentUser.name;
+            loginCountEl.textContent = attendanceDates.length;
+            prizeTicketCountEl.textContent = result.prizeTickets || 0;
+            
+            loginScreen.classList.add('hidden');
+            mainScreen.classList.remove('hidden');
+            
+            updateCalendar();
+            updateButtonState();
+            loginError.textContent = '';
+        }
+        // ▲▲▲【新規追加】ここまで ▲▲▲
 
         function generateDynamicStudyPlusUrl() {
             const now = new Date();
@@ -138,19 +172,7 @@
             
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
-                    currentUser = result.user;
-                    attendanceDates = result.attendanceDates || [];
-                    hasLeftToday = result.hasLeftToday || false;
-                    userNameEl.textContent = currentUser.name;
-                    loginCountEl.textContent = attendanceDates.length;
-                    prizeTicketCountEl.textContent = result.prizeTickets || 0;
-                    
-                    loginScreen.classList.add('hidden');
-                    mainScreen.classList.remove('hidden');
-                    
-                    updateCalendar();
-                    updateButtonState();
-                    loginError.textContent = '';
+                    showMainScreen(result); // ログイン成功処理を共通化
                 } else {
                     loginError.textContent = result.message || 'ログインに失敗しました。';
                 }
@@ -194,7 +216,6 @@
                     alert(result.message || '記録に失敗しました。');
                     button.disabled = false;
                 }
-                // ★修正：ボタンのテキストを元に戻す処理
                 button.textContent = type === 'toko' ? '登校する' : '下校する';
             });
         }
@@ -218,6 +239,7 @@
             setTimeout(() => {
                 lotteryModal.classList.add('hidden');
                 updateButtonState();
+                updateCalendar(); // カレンダーも更新
                 redirectToStudyPlus();
             }, 300);
         }
