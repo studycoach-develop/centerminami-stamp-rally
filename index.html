@@ -57,6 +57,9 @@
                 <button id="geko-btn" onclick="recordAttendance('geko')" class="bg-orange-500 text-white font-bold py-4 rounded-lg hover:bg-orange-600 transition-all duration-300 transform hover:scale-105 btn-shine disabled:opacity-50 disabled:cursor-not-allowed">下校する</button>
             </div>
             
+            <div id="announcements-container" class="space-y-3 mb-6">
+                </div>
+            
             <div class="mt-2 mb-6">
                 <button id="study-plus-link" class="block w-full bg-indigo-500 text-white font-bold py-3 rounded-lg text-center hover:bg-indigo-600 transition-all duration-300 transform hover:scale-105 btn-shine">
                     Study Plusはこちら
@@ -80,8 +83,8 @@
 
     <script>
         // --- 設定 ---
-        const GAS_URL = 'https://script.google.com/macros/s/AKfycbw2CxfL1Nj1rXWLU1-GemWyEGV2Cjyb_MVdDgC5nn9QMxdfKc9USFQkqDg5fCzCfu3Q/exec'; // GASのデプロイURL
-        const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error';
+        const GAS_URL = 'https://script.google.com/macros/s/AKfy.../exec'; // 【重要】ご自身のGASのURLに書き換えてください
+        const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=...'; // 必要に応じて書き換えてください
 
         // --- グローバル変数 ---
         let currentUser = null;
@@ -101,7 +104,7 @@
         const lotteryModal = document.getElementById('lottery-modal');
         const studyPlusLinkBtn = document.getElementById('study-plus-link');
 
-        // ▼▼▼【新規追加】QRコード経由のログイン処理 ▼▼▼
+        // --- 初期化処理 ---
         window.addEventListener('load', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const qrLoginDataStr = urlParams.get('qr_login_data');
@@ -110,11 +113,7 @@
                 try {
                     const decodedData = decodeURIComponent(qrLoginDataStr);
                     const result = JSON.parse(decodedData);
-                    
-                    // ログイン成功後の処理を実行
                     showMainScreen(result);
-
-                    // URLからパラメータを削除して履歴に残さないようにする
                     window.history.replaceState(null, '', window.location.pathname);
                 } catch (e) {
                     console.error("QRログインデータの解析に失敗しました。", e);
@@ -123,6 +122,7 @@
             }
         });
 
+        // --- 関数定義 ---
         function showMainScreen(result) {
             currentUser = result.user;
             attendanceDates = result.attendanceDates || [];
@@ -135,11 +135,30 @@
             loginScreen.classList.add('hidden');
             mainScreen.classList.remove('hidden');
             
+            const announcementsContainer = document.getElementById('announcements-container');
+            announcementsContainer.innerHTML = ''; 
+
+            if (result.announcements && result.announcements.length > 0) {
+                let announcementsHtml = '<h3 class="text-xl font-bold text-gray-800 border-b-2 pb-2 mb-2">📢 お知らせ</h3>';
+                
+                result.announcements.forEach(ann => {
+                    const safeTitle = ann.title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    const safeContent = ann.content.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+                    announcementsHtml += `
+                        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg shadow-sm">
+                            <h4 class="font-bold text-yellow-900">${safeTitle}</h4>
+                            <p class="text-gray-700 mt-1 text-sm">${safeContent}</p>
+                        </div>
+                    `;
+                });
+                announcementsContainer.innerHTML = announcementsHtml;
+            }
+
             updateCalendar();
             updateButtonState();
             loginError.textContent = '';
         }
-        // ▲▲▲【新規追加】ここまで ▲▲▲
 
         function generateDynamicStudyPlusUrl() {
             const now = new Date();
@@ -172,7 +191,7 @@
             
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
-                    showMainScreen(result); // ログイン成功処理を共通化
+                    showMainScreen(result);
                 } else {
                     loginError.textContent = result.message || 'ログインに失敗しました。';
                 }
@@ -239,7 +258,7 @@
             setTimeout(() => {
                 lotteryModal.classList.add('hidden');
                 updateButtonState();
-                updateCalendar(); // カレンダーも更新
+                updateCalendar();
                 redirectToStudyPlus();
             }, 300);
         }
@@ -275,6 +294,7 @@
             }
         }
         
+        // --- イベントリスナー ---
         studyPlusLinkBtn.addEventListener('click', redirectToStudyPlus);
         document.getElementById('prev-month').addEventListener('click', () => { currentMonth.setMonth(currentMonth.getMonth() - 1); updateCalendar(); });
         document.getElementById('next-month').addEventListener('click', () => { currentMonth.setMonth(currentMonth.getMonth() + 1); updateCalendar(); });
