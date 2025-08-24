@@ -91,13 +91,14 @@
         let currentMonth = new Date();
         let attendanceDates = [];
         let hasLeftToday = false;
-        let lastCheckedDate = null;
-        let loginExpiryTimestamp = null;
-        let expiryTimer = null;
+        let lastCheckedDate = null; // 日付変更チェック用
+        let loginExpiryTimestamp = null; // ▼▼▼【追加】ログイン有効期限のタイムスタンプ
+        let expiryTimer = null; // ▼▼▼【追加】自動ログアウト用のタイマーID
 
         // --- DOM要素 ---
         const loginScreen = document.getElementById('login-screen');
         const mainScreen = document.getElementById('main-screen');
+        // ... (その他のDOM要素の定義は変更なし) ...
         const loginError = document.getElementById('login-error');
         const userNameEl = document.getElementById('user-name');
         const loginCountEl = document.getElementById('login-count');
@@ -153,31 +154,41 @@
             
             lastCheckedDate = new Date().toLocaleDateString();
 
+            // ▼▼▼【追加】ログイン有効期限タイマーを開始
             if (result.expiryTimestamp) {
                 loginExpiryTimestamp = result.expiryTimestamp;
                 startExpiryTimer();
             }
+            // ▲▲▲【追加】ここまで
 
             updateCalendar();
             updateButtonState();
             loginError.textContent = '';
         }
 
+        // ▼▼▼【新規追加】ここから（ログイン有効期限タイマー機能）▼▼▼
         function startExpiryTimer() {
-            if (expiryTimer) clearInterval(expiryTimer);
+            // 既存のタイマーがあればクリア
+            if (expiryTimer) {
+                clearInterval(expiryTimer);
+            }
+
             expiryTimer = setInterval(() => {
                 if (!loginExpiryTimestamp) {
                     clearInterval(expiryTimer);
                     return;
                 }
+
                 const now = new Date().getTime();
                 if (now > loginExpiryTimestamp) {
                     alert("セッションの有効期限が切れました。再度ログインしてください。");
-                    logout();
+                    logout(); // タイマーのクリアも内部で行われる
                 }
-            }, 1000);
+            }, 1000); // 1秒ごとにチェック
         }
+        // ▲▲▲【新規追加】ここまで ▲▲▲
 
+        // ▼▼▼【新規追加】ここから（日付変更時の自動ログアウト機能）▼▼▼
         function checkDateAndLogout() {
             if (!currentUser) return;
             const today = new Date().toLocaleDateString();
@@ -192,11 +203,17 @@
                 checkDateAndLogout();
             }
         });
+        // ▲▲▲【新規追加】ここまで ▲▲▲
 
 
         function logout() {
-            if (expiryTimer) clearInterval(expiryTimer);
+            // ▼▼▼【追加】タイマーを停止
+            if (expiryTimer) {
+                clearInterval(expiryTimer);
+            }
             loginExpiryTimestamp = null;
+            // ▲▲▲【追加】ここまで
+
             currentUser = null;
             attendanceDates = [];
             hasLeftToday = false;
@@ -206,7 +223,20 @@
             loginScreen.classList.remove('hidden');
         }
 
+        // --- その他の関数 (変更なし) ---
+        function generateDynamicStudyPlusUrl() {
+            // ... (変更なし) ...
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + 5);
+            const expiresAt = now.toISOString();
+            return `${STUDY_PLUS_BASE_URL}&expires_at=${encodeURIComponent(expiresAt)}`;
+        }
+        function redirectToStudyPlus() {
+            // ... (変更なし) ...
+            window.location.href = generateDynamicStudyPlusUrl();
+        }
         function jsonpRequest(url, callbackName, callback) {
+            // ... (変更なし) ...
             window[callbackName] = callback;
             const script = document.createElement('script');
             script.src = url;
@@ -214,8 +244,8 @@
             script.onload = () => { document.body.removeChild(script); delete window[callbackName]; };
             script.onerror = () => { loginError.textContent = '通信エラーが発生しました。'; document.body.removeChild(script); delete window[callbackName]; };
         }
-
         function login() {
+            // ... (変更なし) ...
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             loginError.textContent = 'ログイン中...';
@@ -230,61 +260,50 @@
                 }
             });
         }
-        
-        // ▼▼▼【ここから修正】抽選モーダル表示を下校時に変更 ▼▼▼
         function recordAttendance(type) {
+            // ... (変更なし) ...
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
             button.textContent = '記録中...';
-
             const callbackName = 'attendanceCallback';
             const url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
-
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
                     if (type === 'toko') {
-                        // 登校成功時：抽選は行わず、画面表示を更新
                         attendanceDates = result.attendanceDates;
                         loginCountEl.textContent = attendanceDates.length;
-                        updateButtonState();
-                        updateCalendar();
-                        alert("登校を記録しました！");
-
-                    } else if (type === 'geko') {
-                        // 下校成功時：抽選モーダルを表示
-                        hasLeftToday = true;
-                        
                         if (result.lotteryResult === 'win') {
                             const currentTickets = parseInt(prizeTicketCountEl.textContent, 10);
                             prizeTicketCountEl.textContent = currentTickets + 1;
                         }
                         showLotteryResult(result.lotteryResult);
+                    } else if (type === 'geko') {
+                        hasLeftToday = true;
+                        updateButtonState();
+                        redirectToStudyPlus();
                     }
                 } else {
                     alert(result.message || '記録に失敗しました。');
                     button.disabled = false;
                 }
-                
-                // ボタンのテキストを元に戻す
                 button.textContent = type === 'toko' ? '登校する' : '下校する';
             });
         }
-        // ▲▲▲【ここまで修正】▲▲▲
-
         function updateButtonState() {
+            // ... (変更なし) ...
             const todayStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
             const hasAttendedToday = attendanceDates.includes(todayStr);
             tokoBtn.disabled = hasAttendedToday;
             gekoBtn.disabled = !hasAttendedToday || hasLeftToday;
         }
-
         function showLotteryResult(result) {
+            // ... (変更なし) ...
             lotteryModal.dataset.result = result;
             lotteryModal.classList.remove('hidden');
             setTimeout(() => { lotteryModal.querySelector('div').classList.remove('scale-95', 'opacity-0'); }, 10);
         }
-
         function closeLottery() {
+            // ... (変更なし) ...
             lotteryModal.querySelector('div').classList.add('scale-95', 'opacity-0');
             setTimeout(() => {
                 lotteryModal.classList.add('hidden');
@@ -293,8 +312,8 @@
                 redirectToStudyPlus();
             }, 300);
         }
-
         function updateCalendar() {
+            // ... (変更なし) ...
             const calendarHeader = document.getElementById('calendar-header');
             const calendarGrid = document.getElementById('calendar-grid');
             calendarGrid.innerHTML = '';
