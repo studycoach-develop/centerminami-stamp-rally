@@ -84,7 +84,7 @@
     <script>
         // --- 設定 ---
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbyZRIcKLrM7Y_IxxnjdKb_vFjn9eij2w6lIq7g9lgR90NQHPFF8iomS1TTWVB18M8f5/exec'; // 【重要】ご自身のGASのURLに書き換えてください
-        const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=...';
+        const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error&expires_at=2025-08-10T09%3A10%3A58.934Z';
 
         // --- グローバル変数 ---
         let currentUser = null;
@@ -98,7 +98,6 @@
         // --- DOM要素 ---
         const loginScreen = document.getElementById('login-screen');
         const mainScreen = document.getElementById('main-screen');
-        // ... (その他のDOM要素の定義は変更なし) ...
         const loginError = document.getElementById('login-error');
         const userNameEl = document.getElementById('user-name');
         const loginCountEl = document.getElementById('login-count');
@@ -154,21 +153,17 @@
             
             lastCheckedDate = new Date().toLocaleDateString();
 
-            // ▼▼▼【追加】ログイン有効期限タイマーを開始
             if (result.expiryTimestamp) {
                 loginExpiryTimestamp = result.expiryTimestamp;
                 startExpiryTimer();
             }
-            // ▲▲▲【追加】ここまで
 
             updateCalendar();
             updateButtonState();
             loginError.textContent = '';
         }
 
-        // ▼▼▼【新規追加】ここから（ログイン有効期限タイマー機能）▼▼▼
         function startExpiryTimer() {
-            // 既存のタイマーがあればクリア
             if (expiryTimer) {
                 clearInterval(expiryTimer);
             }
@@ -182,13 +177,11 @@
                 const now = new Date().getTime();
                 if (now > loginExpiryTimestamp) {
                     alert("セッションの有効期限が切れました。再度ログインしてください。");
-                    logout(); // タイマーのクリアも内部で行われる
+                    logout();
                 }
-            }, 1000); // 1秒ごとにチェック
+            }, 1000);
         }
-        // ▲▲▲【新規追加】ここまで ▲▲▲
-
-        // ▼▼▼【新規追加】ここから（日付変更時の自動ログアウト機能）▼▼▼
+        
         function checkDateAndLogout() {
             if (!currentUser) return;
             const today = new Date().toLocaleDateString();
@@ -203,16 +196,12 @@
                 checkDateAndLogout();
             }
         });
-        // ▲▲▲【新規追加】ここまで ▲▲▲
-
 
         function logout() {
-            // ▼▼▼【追加】タイマーを停止
             if (expiryTimer) {
                 clearInterval(expiryTimer);
             }
             loginExpiryTimestamp = null;
-            // ▲▲▲【追加】ここまで
 
             currentUser = null;
             attendanceDates = [];
@@ -223,20 +212,33 @@
             loginScreen.classList.remove('hidden');
         }
 
-        // --- その他の関数 (変更なし) ---
+        // --- その他の関数 ---
+
+        // ▼▼▼【ここを修正】▼▼▼
         function generateDynamicStudyPlusUrl() {
-            // ... (変更なし) ...
+            // 1. 元のURLをURLオブジェクトとして解析します
+            const originalUrl = new URL(STUDY_PLUS_BASE_URL);
+
+            // 2. URLに含まれる古い 'expires_at' パラメータを削除します
+            originalUrl.searchParams.delete('expires_at'); 
+            
+            // 3. パラメータ削除後のURL文字列を取得します
+            const baseUrlWithoutOldExpiry = originalUrl.toString();
+
+            // 4. 新しい有効期限（5分後）を生成します
             const now = new Date();
             now.setMinutes(now.getMinutes() + 5);
-            const expiresAt = now.toISOString();
-            return `${STUDY_PLUS_BASE_URL}&expires_at=${encodeURIComponent(expiresAt)}`;
+            const newExpiresAt = now.toISOString();
+
+            // 5. 古いパラメータが削除されたURLに、新しい有効期限を付けて返します
+            return `${baseUrlWithoutOldExpiry}&expires_at=${encodeURIComponent(newExpiresAt)}`;
         }
+        // ▲▲▲【修正ここまで】▲▲▲
+
         function redirectToStudyPlus() {
-            // ... (変更なし) ...
             window.location.href = generateDynamicStudyPlusUrl();
         }
         function jsonpRequest(url, callbackName, callback) {
-            // ... (変更なし) ...
             window[callbackName] = callback;
             const script = document.createElement('script');
             script.src = url;
@@ -245,7 +247,6 @@
             script.onerror = () => { loginError.textContent = '通信エラーが発生しました。'; document.body.removeChild(script); delete window[callbackName]; };
         }
         function login() {
-            // ... (変更なし) ...
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             loginError.textContent = 'ログイン中...';
@@ -261,7 +262,6 @@
             });
         }
         function recordAttendance(type) {
-            // ... (変更なし) ...
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
             button.textContent = '記録中...';
@@ -290,20 +290,17 @@
             });
         }
         function updateButtonState() {
-            // ... (変更なし) ...
             const todayStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
             const hasAttendedToday = attendanceDates.includes(todayStr);
             tokoBtn.disabled = hasAttendedToday;
             gekoBtn.disabled = !hasAttendedToday || hasLeftToday;
         }
         function showLotteryResult(result) {
-            // ... (変更なし) ...
             lotteryModal.dataset.result = result;
             lotteryModal.classList.remove('hidden');
             setTimeout(() => { lotteryModal.querySelector('div').classList.remove('scale-95', 'opacity-0'); }, 10);
         }
         function closeLottery() {
-            // ... (変更なし) ...
             lotteryModal.querySelector('div').classList.add('scale-95', 'opacity-0');
             setTimeout(() => {
                 lotteryModal.classList.add('hidden');
@@ -313,7 +310,6 @@
             }, 300);
         }
         function updateCalendar() {
-            // ... (変更なし) ...
             const calendarHeader = document.getElementById('calendar-header');
             const calendarGrid = document.getElementById('calendar-grid');
             calendarGrid.innerHTML = '';
