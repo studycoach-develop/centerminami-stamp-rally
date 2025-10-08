@@ -15,10 +15,6 @@
         .btn-shine { position: relative; overflow: hidden; }
         .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: rgba(255, 255, 255, 0.4); transform: rotate(45deg); transition: all 0.5s ease; opacity: 0; }
         .btn-shine:hover::after { left: 100%; opacity: 1; transition: all 0.5s ease; }
-        #lottery-modal[data-result="win"] #win-content,
-        #lottery-modal[data-result="lose"] #lose-content { display: block; }
-        #lottery-modal #win-content,
-        #lottery-modal #lose-content { display: none; }
     </style>
 </head>
 <body class="bg-blue-50 flex items-center justify-center min-h-screen">
@@ -41,15 +37,9 @@
                 <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500 transition-colors">ログアウト</button>
             </div>
             
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="bg-blue-100 rounded-lg p-4 text-center">
-                    <p class="text-blue-800 text-sm">合計登校日数</p>
-                    <p class="text-3xl font-extrabold text-blue-600"><span id="login-count">0</span> 日</p>
-                </div>
-                <div class="bg-yellow-100 rounded-lg p-4 text-center">
-                    <p class="text-yellow-800 text-sm">景品交換チケット</p>
-                    <p class="text-3xl font-extrabold text-yellow-600"><span id="prize-ticket-count">0</span> 枚</p>
-                </div>
+            <div class="bg-blue-100 rounded-lg p-4 text-center mb-6">
+                <p class="text-blue-800 text-sm">合計登校日数</p>
+                <p class="text-3xl font-extrabold text-blue-600"><span id="login-count">0</span> 日</p>
             </div>
 
             <div class="grid grid-cols-2 gap-4 mb-6">
@@ -58,7 +48,7 @@
             </div>
             
             <div id="announcements-container" class="space-y-3 mb-6">
-                </div>
+            </div>
             
             <div class="mt-2 mb-6">
                 <button id="study-plus-link" class="block w-full bg-indigo-500 text-white font-bold py-3 rounded-lg text-center hover:bg-indigo-600 transition-all duration-300 transform hover:scale-105 btn-shine">
@@ -73,14 +63,6 @@
         </div>
     </div>
 
-    <div id="lottery-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50">
-        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center transform transition-all scale-95 opacity-0">
-            <div id="win-content"><h2 class="text-5xl font-extrabold text-red-500 mb-4 animate-bounce">あたり！</h2><p class="text-yellow-500 text-8xl mb-4">🎉</p><p class="text-gray-700 text-lg mb-6">おめでとう！景品チケットを1枚ゲット！</p></div>
-            <div id="lose-content"><h2 class="text-5xl font-extrabold text-blue-500 mb-4">ざんねん！</h2><p class="text-blue-400 text-8xl mb-4">💧</p><p class="text-gray-700 text-lg mb-6">また明日チャレンジしてね！</p></div>
-            <button onclick="closeLottery()" class="w-full mt-4 bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 transition-colors">とじる</button>
-        </div>
-    </div>
-
     <script>
         // --- 設定 ---
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbyZRIcKLrM7Y_IxxnjdKb_vFjn9eij2w6lIq7g9lgR90NQHPFF8iomS1TTWVB18M8f5/exec'; // 【重要】ご自身のGASのURLに書き換えてください
@@ -91,9 +73,9 @@
         let currentMonth = new Date();
         let attendanceDates = [];
         let hasLeftToday = false;
-        let lastCheckedDate = null; // 日付変更チェック用
-        let loginExpiryTimestamp = null; // ▼▼▼【追加】ログイン有効期限のタイムスタンプ
-        let expiryTimer = null; // ▼▼▼【追加】自動ログアウト用のタイマーID
+        let lastCheckedDate = null;
+        let loginExpiryTimestamp = null;
+        let expiryTimer = null;
 
         // --- DOM要素 ---
         const loginScreen = document.getElementById('login-screen');
@@ -101,10 +83,8 @@
         const loginError = document.getElementById('login-error');
         const userNameEl = document.getElementById('user-name');
         const loginCountEl = document.getElementById('login-count');
-        const prizeTicketCountEl = document.getElementById('prize-ticket-count');
         const tokoBtn = document.getElementById('toko-btn');
         const gekoBtn = document.getElementById('geko-btn');
-        const lotteryModal = document.getElementById('lottery-modal');
         const studyPlusLinkBtn = document.getElementById('study-plus-link');
 
         // --- 初期化処理 ---
@@ -133,7 +113,6 @@
             
             userNameEl.textContent = currentUser.name;
             loginCountEl.textContent = attendanceDates.length;
-            prizeTicketCountEl.textContent = result.prizeTickets || 0;
             
             loginScreen.classList.add('hidden');
             mainScreen.classList.remove('hidden');
@@ -213,31 +192,20 @@
         }
 
         // --- その他の関数 ---
-
-        // ▼▼▼【ここを修正】▼▼▼
         function generateDynamicStudyPlusUrl() {
-            // 1. 元のURLをURLオブジェクトとして解析します
             const originalUrl = new URL(STUDY_PLUS_BASE_URL);
-
-            // 2. URLに含まれる古い 'expires_at' パラメータを削除します
             originalUrl.searchParams.delete('expires_at'); 
-            
-            // 3. パラメータ削除後のURL文字列を取得します
             const baseUrlWithoutOldExpiry = originalUrl.toString();
-
-            // 4. 新しい有効期限（5分後）を生成します
             const now = new Date();
             now.setMinutes(now.getMinutes() + 5);
             const newExpiresAt = now.toISOString();
-
-            // 5. 古いパラメータが削除されたURLに、新しい有効期限を付けて返します
             return `${baseUrlWithoutOldExpiry}&expires_at=${encodeURIComponent(newExpiresAt)}`;
         }
-        // ▲▲▲【修正ここまで】▲▲▲
 
         function redirectToStudyPlus() {
             window.location.href = generateDynamicStudyPlusUrl();
         }
+
         function jsonpRequest(url, callbackName, callback) {
             window[callbackName] = callback;
             const script = document.createElement('script');
@@ -246,6 +214,7 @@
             script.onload = () => { document.body.removeChild(script); delete window[callbackName]; };
             script.onerror = () => { loginError.textContent = '通信エラーが発生しました。'; document.body.removeChild(script); delete window[callbackName]; };
         }
+
         function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -261,22 +230,22 @@
                 }
             });
         }
+
         function recordAttendance(type) {
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
             button.textContent = '記録中...';
             const callbackName = 'attendanceCallback';
             const url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
+            
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
                     if (type === 'toko') {
                         attendanceDates = result.attendanceDates;
                         loginCountEl.textContent = attendanceDates.length;
-                        if (result.lotteryResult === 'win') {
-                            const currentTickets = parseInt(prizeTicketCountEl.textContent, 10);
-                            prizeTicketCountEl.textContent = currentTickets + 1;
-                        }
-                        showLotteryResult(result.lotteryResult);
+                        updateButtonState();
+                        updateCalendar();
+                        redirectToStudyPlus(); // 抽選をせずに直接リダイレクト
                     } else if (type === 'geko') {
                         hasLeftToday = true;
                         updateButtonState();
@@ -284,31 +253,20 @@
                     }
                 } else {
                     alert(result.message || '記録に失敗しました。');
-                    button.disabled = false;
+                    button.disabled = false; // エラー時はボタンを元に戻す
                 }
+                // 成功時はリダイレクトするので、テキストを戻す必要はほぼないが一応記載
                 button.textContent = type === 'toko' ? '登校する' : '下校する';
             });
         }
+
         function updateButtonState() {
             const todayStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
             const hasAttendedToday = attendanceDates.includes(todayStr);
             tokoBtn.disabled = hasAttendedToday;
             gekoBtn.disabled = !hasAttendedToday || hasLeftToday;
         }
-        function showLotteryResult(result) {
-            lotteryModal.dataset.result = result;
-            lotteryModal.classList.remove('hidden');
-            setTimeout(() => { lotteryModal.querySelector('div').classList.remove('scale-95', 'opacity-0'); }, 10);
-        }
-        function closeLottery() {
-            lotteryModal.querySelector('div').classList.add('scale-95', 'opacity-0');
-            setTimeout(() => {
-                lotteryModal.classList.add('hidden');
-                updateButtonState();
-                updateCalendar();
-                redirectToStudyPlus();
-            }, 300);
-        }
+
         function updateCalendar() {
             const calendarHeader = document.getElementById('calendar-header');
             const calendarGrid = document.getElementById('calendar-grid');
