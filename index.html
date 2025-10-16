@@ -245,7 +245,7 @@
                         loginCountEl.textContent = attendanceDates.length;
                         updateButtonState();
                         updateCalendar();
-                        redirectToStudyPlus(); // 抽選をせずに直接リダイレクト
+                        redirectToStudyPlus(); 
                     } else if (type === 'geko') {
                         hasLeftToday = true;
                         updateButtonState();
@@ -255,7 +255,6 @@
                     alert(result.message || '記録に失敗しました。');
                     button.disabled = false; // エラー時はボタンを元に戻す
                 }
-                // 成功時はリダイレクトするので、テキストを戻す必要はほぼないが一応記載
                 button.textContent = type === 'toko' ? '登校する' : '下校する';
             });
         }
