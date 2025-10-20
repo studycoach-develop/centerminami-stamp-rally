@@ -65,11 +65,11 @@
 
     <script>
         // --- 設定 ---
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ GAS_URLを、先ほど「新規デプロイ」したURLに書き換えてください ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        const GAS_URL = 'https://script.google.com/macros/s/AKfycbw9Uzp2tnUKpLxUv_8MOBT6cffjCMO91yXL1F3WSRK44DN3BCBY0YiCxpdfrWIgKWOT/exec'; 
-        const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error&expires_at=2025-08-10T09%3A10%3A58.934Z';
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ GAS_URLは、先ほどデプロイした「バグ修正版」のURLにしてください ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        const GAS_URL = 'https://script.google.com/macros/s/AKfyc...(ここに最新のGASのURL).../exec'; 
+        const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=httpsA%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error&expires_at=2025-08-10T09%3A10%3A58.934Z';
 
         // --- グローバル変数 ---
         let currentUser = null;
@@ -135,7 +135,6 @@
             
             lastCheckedDate = new Date().toLocaleDateString();
 
-            // ★ ログイン時も有効期限を受け取るように (GAS側の変更に対応)
             if (result.expiryTimestamp) { 
                 loginExpiryTimestamp = result.expiryTimestamp;
                 startExpiryTimer();
@@ -147,16 +146,12 @@
         }
 
         function startExpiryTimer() {
-            if (expiryTimer) {
-                clearInterval(expiryTimer);
-            }
-
+            if (expiryTimer) clearInterval(expiryTimer);
             expiryTimer = setInterval(() => {
                 if (!loginExpiryTimestamp) {
                     clearInterval(expiryTimer);
                     return;
                 }
-
                 const now = new Date().getTime();
                 if (now > loginExpiryTimestamp) {
                     alert("セッションの有効期限が切れました。再度ログインしてください。");
@@ -181,11 +176,8 @@
         });
 
         function logout() {
-            if (expiryTimer) {
-                clearInterval(expiryTimer);
-            }
+            if (expiryTimer) clearInterval(expiryTimer);
             loginExpiryTimestamp = null;
-
             currentUser = null;
             attendanceDates = [];
             hasLeftToday = false;
@@ -210,9 +202,6 @@
             window.location.href = generateDynamicStudyPlusUrl();
         }
 
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ これが「jsonpRequest」関数です (元のまま) ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         function jsonpRequest(url, callbackName, callback) {
             window[callbackName] = callback;
             const script = document.createElement('script');
@@ -220,15 +209,13 @@
             document.body.appendChild(script);
             script.onload = () => { document.body.removeChild(script); delete window[callbackName]; };
             script.onerror = () => { 
-                loginError.textContent = '通信エラーが発生しました。'; // ← "通信エラー" はここで表示されます
+                loginError.textContent = '通信エラーが発生しました。'; 
                 document.body.removeChild(script); 
                 delete window[callbackName]; 
             };
         }
 
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ これが「login」関数です (元の jsonpRequest を使う) ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ login() は変更なし (返事を待つ必要がある)
         function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -245,35 +232,36 @@
             });
         }
 
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ これが「recordAttendance」関数です (元の jsonpRequest を使う) ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ 変更箇所 ★
+        // ★ recordAttendance() が「返事を待たずに」画面遷移するよう修正 ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         function recordAttendance(type) {
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
-            button.textContent = '記録中...';
+            button.textContent = '記録中...'; // ユーザーが一瞬だけ見る
             const callbackName = 'attendanceCallback';
             const url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
             
+            // 1. GASへのリクエストを「投げる」
             jsonpRequest(url, callbackName, (result) => {
+                // 3. この中身は「6秒後」に実行される (ユーザーはもう見ていない)
+                //    エラーがあってもアラートを出さず、コンソールに記録する
                 if (result.success) {
+                    console.log("バックグラウンドでの記録に成功しました: ", type);
+                    // ユーザーが戻ってきた時のために、グローバル変数をこっそり更新
                     if (type === 'toko') {
                         attendanceDates = result.attendanceDates;
-                        loginCountEl.textContent = attendanceDates.length;
-                        updateButtonState();
-                        updateCalendar();
-                        redirectToStudyPlus();  
                     } else if (type === 'geko') {
                         hasLeftToday = true;
-                        updateButtonState();
-                        redirectToStudyPlus();
                     }
                 } else {
-                    alert(result.message || '記録に失敗しました。');
-                    button.disabled = false; // エラー時はボタンを元に戻す
+                    console.error("バックグラウンドでの記録に失敗しました: ", result.message || '記録に失敗しました。');
                 }
-                button.textContent = type === 'toko' ? '登校する' : '下校する';
             });
+
+            // 2. 返事を待たずに「すぐ」画面遷移する
+            redirectToStudyPlus();
         }
 
         function updateButtonState() {
