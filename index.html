@@ -65,7 +65,10 @@
 
     <script>
         // --- 設定 ---
-        const GAS_URL = 'https://script.google.com/macros/s/AKfycbzvB6e04LdH_qAcClecyoPvF42_5l44mHFHWnEZwisUVP3korJ-SRL1ikDuYZmDevhi/exec'; // 【重要】ご自身のGASのURLに書き換えてください
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ GAS_URLを、先ほど「新規デプロイ」したURLに書き換えてください ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycbw9Uzp2tnUKpLxUv_8MOBT6cffjCMO91yXL1F3WSRK44DN3BCBY0YiCxpdfrWIgKWOT/exec'; 
         const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error&expires_at=2025-08-10T09%3A10%3A58.934Z';
 
         // --- グローバル変数 ---
@@ -132,7 +135,8 @@
             
             lastCheckedDate = new Date().toLocaleDateString();
 
-            if (result.expiryTimestamp) {
+            // ★ ログイン時も有効期限を受け取るように (GAS側の変更に対応)
+            if (result.expiryTimestamp) { 
                 loginExpiryTimestamp = result.expiryTimestamp;
                 startExpiryTimer();
             }
@@ -206,79 +210,52 @@
             window.location.href = generateDynamicStudyPlusUrl();
         }
 
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ 変更箇所 1: jsonpRequest 関数を削除 ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★
-        
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ 変更箇所 2: login 関数を fetch (POST) を使う async 関数に変更 ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        async function login() {
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ これが「jsonpRequest」関数です (元のまま) ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        function jsonpRequest(url, callbackName, callback) {
+            window[callbackName] = callback;
+            const script = document.createElement('script');
+            script.src = url;
+            document.body.appendChild(script);
+            script.onload = () => { document.body.removeChild(script); delete window[callbackName]; };
+            script.onerror = () => { 
+                loginError.textContent = '通信エラーが発生しました。'; // ← "通信エラー" はここで表示されます
+                document.body.removeChild(script); 
+                delete window[callbackName]; 
+            };
+        }
+
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ これが「login」関数です (元の jsonpRequest を使う) ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             loginError.textContent = 'ログイン中...';
-            if (!username || !password) { 
-                loginError.textContent = 'IDとパスワードを入力してください。'; 
-                return; 
-            }
-
-            try {
-                const response = await fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        action: 'login',
-                        username: username,
-                        password: password
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`サーバーエラー: ${response.statusText}`);
-                }
-
-                const result = await response.json();
-
+            if (!username || !password) { loginError.textContent = 'IDとパスワードを入力してください。'; return; }
+            const callbackName = 'loginCallback';
+            const url = `${GAS_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&callback=${callbackName}`;
+            jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
                     showMainScreen(result);
                 } else {
                     loginError.textContent = result.message || 'ログインに失敗しました。';
                 }
-            } catch (error) {
-                console.error('Login error:', error);
-                loginError.textContent = '通信エラーが発生しました。';
-            }
+            });
         }
 
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ 変更箇所 3: recordAttendance 関数を fetch (POST) を使う async 関数に変更 ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        async function recordAttendance(type) {
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ これが「recordAttendance」関数です (元の jsonpRequest を使う) ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        function recordAttendance(type) {
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
             button.textContent = '記録中...';
-
-            try {
-                const response = await fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        action: 'recordAttendance',
-                        userId: currentUser.id,
-                        type: type
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`サーバーエラー: ${response.statusText}`);
-                }
-
-                const result = await response.json();
-
+            const callbackName = 'attendanceCallback';
+            const url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
+            
+            jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
                     if (type === 'toko') {
                         attendanceDates = result.attendanceDates;
@@ -293,18 +270,10 @@
                     }
                 } else {
                     alert(result.message || '記録に失敗しました。');
-                    button.disabled = false;
+                    button.disabled = false; // エラー時はボタンを元に戻す
                 }
-            } catch (error) {
-                console.error('Attendance error:', error);
-                alert('記録中に通信エラーが発生しました。');
-                button.disabled = false;
-            } finally {
-                // 成功時はリダイレクトされるが、エラー時やリダイレクト失敗時のためにボタンテキストを戻す
                 button.textContent = type === 'toko' ? '登校する' : '下校する';
-                // 最終的なボタンの状態を更新
-                updateButtonState();
-            }
+            });
         }
 
         function updateButtonState() {
