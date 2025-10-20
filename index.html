@@ -206,46 +206,86 @@
             window.location.href = generateDynamicStudyPlusUrl();
         }
 
-        function jsonpRequest(url, callbackName, callback) {
-            window[callbackName] = callback;
-            const script = document.createElement('script');
-            script.src = url;
-            document.body.appendChild(script);
-            script.onload = () => { document.body.removeChild(script); delete window[callbackName]; };
-            script.onerror = () => { loginError.textContent = '通信エラーが発生しました。'; document.body.removeChild(script); delete window[callbackName]; };
-        }
-
-        function login() {
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ 変更箇所 1: jsonpRequest 関数を削除 ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★
+        
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ 変更箇所 2: login 関数を fetch (POST) を使う async 関数に変更 ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        async function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             loginError.textContent = 'ログイン中...';
-            if (!username || !password) { loginError.textContent = 'IDとパスワードを入力してください。'; return; }
-            const callbackName = 'loginCallback';
-            const url = `${GAS_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&callback=${callbackName}`;
-            jsonpRequest(url, callbackName, (result) => {
+            if (!username || !password) { 
+                loginError.textContent = 'IDとパスワードを入力してください。'; 
+                return; 
+            }
+
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'login',
+                        username: username,
+                        password: password
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`サーバーエラー: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
                 if (result.success) {
                     showMainScreen(result);
                 } else {
                     loginError.textContent = result.message || 'ログインに失敗しました。';
                 }
-            });
+            } catch (error) {
+                console.error('Login error:', error);
+                loginError.textContent = '通信エラーが発生しました。';
+            }
         }
 
-        function recordAttendance(type) {
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★ 変更箇所 3: recordAttendance 関数を fetch (POST) を使う async 関数に変更 ★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        async function recordAttendance(type) {
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
             button.textContent = '記録中...';
-            const callbackName = 'attendanceCallback';
-            const url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
-            
-            jsonpRequest(url, callbackName, (result) => {
+
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'recordAttendance',
+                        userId: currentUser.id,
+                        type: type
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`サーバーエラー: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
                 if (result.success) {
                     if (type === 'toko') {
                         attendanceDates = result.attendanceDates;
                         loginCountEl.textContent = attendanceDates.length;
                         updateButtonState();
                         updateCalendar();
-                        redirectToStudyPlus(); 
+                        redirectToStudyPlus();  
                     } else if (type === 'geko') {
                         hasLeftToday = true;
                         updateButtonState();
@@ -253,10 +293,18 @@
                     }
                 } else {
                     alert(result.message || '記録に失敗しました。');
-                    button.disabled = false; // エラー時はボタンを元に戻す
+                    button.disabled = false;
                 }
+            } catch (error) {
+                console.error('Attendance error:', error);
+                alert('記録中に通信エラーが発生しました。');
+                button.disabled = false;
+            } finally {
+                // 成功時はリダイレクトされるが、エラー時やリダイレクト失敗時のためにボタンテキストを戻す
                 button.textContent = type === 'toko' ? '登校する' : '下校する';
-            });
+                // 最終的なボタンの状態を更新
+                updateButtonState();
+            }
         }
 
         function updateButtonState() {
