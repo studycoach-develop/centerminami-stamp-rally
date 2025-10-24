@@ -199,7 +199,9 @@
         }
 
         function redirectToStudyPlus() {
-            window.location.href = generateDynamicStudyPlusUrl();
+            const urlToOpen = generateDynamicStudyPlusUrl();
+            // '_blank' を指定することで新しいタブで開く
+            window.open(urlToOpen, '_blank');
         }
 
         function jsonpRequest(url, callbackName, callback) {
