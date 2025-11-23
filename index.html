@@ -60,13 +60,37 @@
                 <div class="flex justify-between items-center mb-4"><button id="prev-month" class="text-gray-600 hover:text-blue-500">&lt;</button><h3 id="calendar-header" class="text-lg font-bold text-gray-700"></h3><button id="next-month" class="text-gray-600 hover:text-blue-500">&gt;</button></div>
                 <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
             </div>
+
+            <div id="next-visit-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 px-4">
+                <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">お疲れ様でした！👋</h3>
+                    <p class="text-gray-600 mb-4 text-sm text-center">次回の登校予定を教えてね</p>
+                    
+                    <div class="mb-6">
+                        <label for="next-visit-input" class="block text-gray-700 text-sm font-bold mb-2">日時選択</label>
+                        <input type="datetime-local" id="next-visit-input" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-gray-50 text-lg">
+                    </div>
+
+                    <div class="flex space-x-3 mb-4">
+                        <button onclick="closeNextVisitModal()" class="flex-1 bg-gray-200 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-300 transition-colors">キャンセル</button>
+                        <button onclick="submitNextVisit()" class="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 shadow-md transition-transform transform hover:scale-105">決定して下校</button>
+                    </div>
+
+                    <div class="border-t pt-4">
+                        <button onclick="submitLineLater()" class="block w-full bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 shadow-md transition-transform transform hover:scale-105 btn-shine text-sm leading-tight">
+                            いつ来れるかわからないので<br>あとでLINEで送る
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <script>
         // --- 設定 ---
         // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ GAS_URLは、先ほどデプロイした「バグ修正版」のURLにしてください ★
+        // ★ GAS_URLは、新しいデプロイURLに書き換えてください ★
         // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbw9Uzp2tnUKpLxUv_8MOBT6cffjCMO91yXL1F3WSRK44DN3BCBY0YiCxpdfrWIgKWOT/exec'; 
         const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error&expires_at=2025-08-10T09%3A10%3A58.934Z';
@@ -89,6 +113,8 @@
         const tokoBtn = document.getElementById('toko-btn');
         const gekoBtn = document.getElementById('geko-btn');
         const studyPlusLinkBtn = document.getElementById('study-plus-link');
+        const nextVisitModal = document.getElementById('next-visit-modal');
+        const nextVisitInput = document.getElementById('next-visit-input');
 
         // --- 初期化処理 ---
         window.addEventListener('load', () => {
@@ -200,7 +226,6 @@
 
         function redirectToStudyPlus() {
             const urlToOpen = generateDynamicStudyPlusUrl();
-            // '_blank' を指定することで新しいタブで開く
             window.open(urlToOpen, '_blank');
         }
 
@@ -217,7 +242,6 @@
             };
         }
 
-        // ★ login() は変更なし (返事を待つ必要がある)
         function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
@@ -235,23 +259,63 @@
         }
 
         // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ 変更箇所 ★
-        // ★ recordAttendance() が「返事を待たずに」画面遷移するよう修正 ★
+        // ★ 変更箇所: モーダル操作関数の拡張 ★
         // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        
+        // ボタンが押された時の入口
         function recordAttendance(type) {
+            if (type === 'geko') {
+                // 下校の場合はモーダルを表示して入力を待つ
+                const now = new Date();
+                const offset = now.getTimezoneOffset() * 60000;
+                const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16);
+                nextVisitInput.value = localISOTime; 
+                nextVisitModal.classList.remove('hidden');
+            } else {
+                // 登校の場合は今まで通り即実行
+                executeAttendance('toko', null);
+            }
+        }
+
+        // モーダルの「決定」ボタンが押された時（日時指定）
+        function submitNextVisit() {
+            const nextVisitVal = nextVisitInput.value;
+            // 未入力で決定を押された場合も、空データとして送るか、アラートを出すかはお好みで。
+            // ここでは空でも進めるようにしています。
+            nextVisitModal.classList.add('hidden');
+            executeAttendance('geko', nextVisitVal);
+        }
+
+        // ★ 新規追加: 「LINEで送る」ボタンが押された時
+        function submitLineLater() {
+            nextVisitModal.classList.add('hidden');
+            // GASへは「LINEで連絡」という文字列を送る
+            executeAttendance('geko', 'LINEで連絡');
+        }
+
+        // モーダルの「キャンセル」ボタン
+        function closeNextVisitModal() {
+            nextVisitModal.classList.add('hidden');
+        }
+
+        // 実際の通信処理
+        function executeAttendance(type, nextVisitDate) {
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
-            button.textContent = '記録中...'; // ユーザーが一瞬だけ見る
+            button.textContent = '記録中...'; 
+
             const callbackName = 'attendanceCallback';
-            const url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
             
+            // URLに nextVisit パラメータを追加
+            let url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
+            if (nextVisitDate) {
+                url += `&nextVisit=${encodeURIComponent(nextVisitDate)}`;
+            }
+
             // 1. GASへのリクエストを「投げる」
             jsonpRequest(url, callbackName, (result) => {
-                // 3. この中身は「6秒後」に実行される (ユーザーはもう見ていない)
-                //    エラーがあってもアラートを出さず、コンソールに記録する
                 if (result.success) {
                     console.log("バックグラウンドでの記録に成功しました: ", type);
-                    // ユーザーが戻ってきた時のために、グローバル変数をこっそり更新
                     if (type === 'toko') {
                         attendanceDates = result.attendanceDates;
                     } else if (type === 'geko') {
