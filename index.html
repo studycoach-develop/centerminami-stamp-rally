@@ -111,14 +111,9 @@
     </div>
 
     <script>
-        // --- 設定 ---
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ GAS_URLは、新しいデプロイURLに書き換えてください ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbw9Uzp2tnUKpLxUv_8MOBT6cffjCMO91yXL1F3WSRK44DN3BCBY0YiCxpdfrWIgKWOT/exec'; 
         const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error&expires_at=2025-08-10T09%3A10%3A58.934Z';
 
-        // --- グローバル変数 ---
         let currentUser = null;
         let currentMonth = new Date();
         let attendanceDates = [];
@@ -127,7 +122,6 @@
         let loginExpiryTimestamp = null;
         let expiryTimer = null;
 
-        // --- DOM要素 ---
         const loginScreen = document.getElementById('login-screen');
         const mainScreen = document.getElementById('main-screen');
         const loginError = document.getElementById('login-error');
@@ -137,13 +131,11 @@
         const gekoBtn = document.getElementById('geko-btn');
         const studyPlusLinkBtn = document.getElementById('study-plus-link');
         
-        // モーダル要素
         const nextVisitModal = document.getElementById('next-visit-modal');
         const nextVisitInput = document.getElementById('next-visit-input');
         const emergencyModal = document.getElementById('emergency-modal');
         const emergencyDetail = document.getElementById('emergency-detail');
 
-        // --- 初期化処理 ---
         window.addEventListener('load', () => {
             const urlParams = new URLSearchParams(window.location.search);
             const qrLoginDataStr = urlParams.get('qr_login_data');
@@ -161,7 +153,6 @@
             }
         });
 
-        // --- 関数定義 ---
         function showMainScreen(result) {
             currentUser = result.user;
             attendanceDates = result.attendanceDates || [];
@@ -284,34 +275,28 @@
             });
         }
 
-        // --- 登下校記録プロセス ---
-        
         function recordAttendance(type) {
             if (type === 'geko') {
-                // 下校: モーダル表示
-                // ★ 明日の日付を計算して min属性にセット
                 const now = new Date();
                 const tomorrow = new Date(now);
                 tomorrow.setDate(tomorrow.getDate() + 1);
+                // ★ 修正: 明日の「00:00」をセットする (これまでは19:00などが入っていた)
+                tomorrow.setHours(0, 0, 0, 0);
                 
-                // JSTオフセットを考慮してISO文字列生成 (yyyy-MM-ddThh:mm)
                 const offset = tomorrow.getTimezoneOffset() * 60000;
                 const localTomorrowISO = (new Date(tomorrow.getTime() - offset)).toISOString().slice(0, 16);
                 
-                // inputのminにセット (初期値は空で、ユーザーに選ばせる)
                 nextVisitInput.min = localTomorrowISO;
-                nextVisitInput.value = ""; // リセット
+                nextVisitInput.value = ""; 
                 
                 nextVisitModal.classList.remove('hidden');
             } else {
-                // 登校: 即実行
                 executeAttendance('toko', null);
             }
         }
 
         function submitNextVisit() {
             const nextVisitVal = nextVisitInput.value;
-            // 明日以降かどうかの簡易チェック（ブラウザのmin属性で基本は防げるが念のため）
             if (nextVisitVal && new Date(nextVisitVal) < new Date(nextVisitInput.min)) {
                 alert("明日以降の日付を選択してください。");
                 return;
@@ -356,7 +341,6 @@
             redirectToStudyPlus();
         }
 
-        // --- ★ 追加: 緊急連絡プロセス ★ ---
         function openEmergencyModal() {
             emergencyDetail.value = '';
             emergencyModal.classList.remove('hidden');
@@ -372,8 +356,6 @@
                 alert("要件を入力してください。");
                 return;
             }
-            
-            // 送信処理（UIブロックなどは最低限に）
             const callbackName = 'emergencyCallback';
             const url = `${GAS_URL}?action=emergency&userId=${encodeURIComponent(currentUser.id)}&detail=${encodeURIComponent(detail)}&callback=${callbackName}`;
             
@@ -427,7 +409,6 @@
             }
         }
         
-        // --- イベントリスナー ---
         studyPlusLinkBtn.addEventListener('click', redirectToStudyPlus);
         document.getElementById('prev-month').addEventListener('click', () => { currentMonth.setMonth(currentMonth.getMonth() - 1); updateCalendar(); });
         document.getElementById('next-month').addEventListener('click', () => { currentMonth.setMonth(currentMonth.getMonth() + 1); updateCalendar(); });
