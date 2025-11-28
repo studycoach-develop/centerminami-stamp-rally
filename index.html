@@ -56,15 +56,22 @@
                 </button>
             </div>
 
-            <div id="calendar" class="bg-gray-50 p-4 rounded-lg">
+            <div id="calendar" class="bg-gray-50 p-4 rounded-lg mb-8">
                 <div class="flex justify-between items-center mb-4"><button id="prev-month" class="text-gray-600 hover:text-blue-500">&lt;</button><h3 id="calendar-header" class="text-lg font-bold text-gray-700"></h3><button id="next-month" class="text-gray-600 hover:text-blue-500">&gt;</button></div>
                 <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
+            </div>
+
+            <div class="border-t-2 border-gray-100 pt-6">
+                <button onclick="openEmergencyModal()" class="w-full bg-red-500 text-white font-bold py-3 rounded-lg hover:bg-red-600 transition-all duration-300 shadow-md">
+                    🚨 緊急連絡
+                </button>
+                <p class="text-xs text-gray-500 text-center mt-2">無人開館時のトラブルの際などにご活用ください</p>
             </div>
 
             <div id="next-visit-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 px-4">
                 <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">お疲れ様でした！👋</h3>
-                    <p class="text-gray-600 mb-4 text-sm text-center">次回の登校予定を教えてね</p>
+                    <p class="text-gray-600 mb-4 text-sm text-center">次回の登校予定を教えてね<br><span class="text-xs text-blue-500">※明日以降の日付を選択してください</span></p>
                     
                     <div class="mb-6">
                         <label for="next-visit-input" class="block text-gray-700 text-sm font-bold mb-2">日時選択</label>
@@ -80,6 +87,22 @@
                         <button onclick="submitLineLater()" class="block w-full bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 shadow-md transition-transform transform hover:scale-105 btn-shine text-sm leading-tight">
                             いつ来れるかわからないので<br>あとでLINEで送る
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="emergency-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 px-4">
+                <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform transition-all scale-100">
+                    <h3 class="text-xl font-bold text-red-600 mb-2 text-center">🚨 緊急連絡</h3>
+                    <p class="text-gray-600 mb-4 text-sm text-center">スタッフに通知を送ります。<br>要件を入力してください。</p>
+                    
+                    <div class="mb-6">
+                        <textarea id="emergency-detail" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 bg-gray-50" placeholder="例：鍵が開いていません、コピー機が詰まりました、など"></textarea>
+                    </div>
+
+                    <div class="flex space-x-3">
+                        <button onclick="closeEmergencyModal()" class="flex-1 bg-gray-200 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-300 transition-colors">キャンセル</button>
+                        <button onclick="submitEmergency()" class="flex-1 bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 shadow-md transition-transform transform hover:scale-105">送信する</button>
                     </div>
                 </div>
             </div>
@@ -113,8 +136,12 @@
         const tokoBtn = document.getElementById('toko-btn');
         const gekoBtn = document.getElementById('geko-btn');
         const studyPlusLinkBtn = document.getElementById('study-plus-link');
+        
+        // モーダル要素
         const nextVisitModal = document.getElementById('next-visit-modal');
         const nextVisitInput = document.getElementById('next-visit-input');
+        const emergencyModal = document.getElementById('emergency-modal');
+        const emergencyDetail = document.getElementById('emergency-detail');
 
         // --- 初期化処理 ---
         window.addEventListener('load', () => {
@@ -213,7 +240,6 @@
             loginScreen.classList.remove('hidden');
         }
 
-        // --- その他の関数 ---
         function generateDynamicStudyPlusUrl() {
             const originalUrl = new URL(STUDY_PLUS_BASE_URL);
             originalUrl.searchParams.delete('expires_at'); 
@@ -258,61 +284,62 @@
             });
         }
 
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★ 変更箇所: モーダル操作関数の拡張 ★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // --- 登下校記録プロセス ---
         
-        // ボタンが押された時の入口
         function recordAttendance(type) {
             if (type === 'geko') {
-                // 下校の場合はモーダルを表示して入力を待つ
+                // 下校: モーダル表示
+                // ★ 明日の日付を計算して min属性にセット
                 const now = new Date();
-                const offset = now.getTimezoneOffset() * 60000;
-                const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16);
-                nextVisitInput.value = localISOTime; 
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                
+                // JSTオフセットを考慮してISO文字列生成 (yyyy-MM-ddThh:mm)
+                const offset = tomorrow.getTimezoneOffset() * 60000;
+                const localTomorrowISO = (new Date(tomorrow.getTime() - offset)).toISOString().slice(0, 16);
+                
+                // inputのminにセット (初期値は空で、ユーザーに選ばせる)
+                nextVisitInput.min = localTomorrowISO;
+                nextVisitInput.value = ""; // リセット
+                
                 nextVisitModal.classList.remove('hidden');
             } else {
-                // 登校の場合は今まで通り即実行
+                // 登校: 即実行
                 executeAttendance('toko', null);
             }
         }
 
-        // モーダルの「決定」ボタンが押された時（日時指定）
         function submitNextVisit() {
             const nextVisitVal = nextVisitInput.value;
-            // 未入力で決定を押された場合も、空データとして送るか、アラートを出すかはお好みで。
-            // ここでは空でも進めるようにしています。
+            // 明日以降かどうかの簡易チェック（ブラウザのmin属性で基本は防げるが念のため）
+            if (nextVisitVal && new Date(nextVisitVal) < new Date(nextVisitInput.min)) {
+                alert("明日以降の日付を選択してください。");
+                return;
+            }
             nextVisitModal.classList.add('hidden');
             executeAttendance('geko', nextVisitVal);
         }
 
-        // ★ 新規追加: 「LINEで送る」ボタンが押された時
         function submitLineLater() {
             nextVisitModal.classList.add('hidden');
-            // GASへは「LINEで連絡」という文字列を送る
             executeAttendance('geko', 'LINEで連絡');
         }
 
-        // モーダルの「キャンセル」ボタン
         function closeNextVisitModal() {
             nextVisitModal.classList.add('hidden');
         }
 
-        // 実際の通信処理
         function executeAttendance(type, nextVisitDate) {
             const button = type === 'toko' ? tokoBtn : gekoBtn;
             button.disabled = true;
             button.textContent = '記録中...'; 
 
             const callbackName = 'attendanceCallback';
-            
-            // URLに nextVisit パラメータを追加
             let url = `${GAS_URL}?action=recordAttendance&userId=${encodeURIComponent(currentUser.id)}&type=${type}&callback=${callbackName}`;
             if (nextVisitDate) {
                 url += `&nextVisit=${encodeURIComponent(nextVisitDate)}`;
             }
 
-            // 1. GASへのリクエストを「投げる」
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
                     console.log("バックグラウンドでの記録に成功しました: ", type);
@@ -326,8 +353,40 @@
                 }
             });
 
-            // 2. 返事を待たずに「すぐ」画面遷移する
             redirectToStudyPlus();
+        }
+
+        // --- ★ 追加: 緊急連絡プロセス ★ ---
+        function openEmergencyModal() {
+            emergencyDetail.value = '';
+            emergencyModal.classList.remove('hidden');
+        }
+        
+        function closeEmergencyModal() {
+            emergencyModal.classList.add('hidden');
+        }
+
+        function submitEmergency() {
+            const detail = emergencyDetail.value;
+            if (!detail) {
+                alert("要件を入力してください。");
+                return;
+            }
+            
+            // 送信処理（UIブロックなどは最低限に）
+            const callbackName = 'emergencyCallback';
+            const url = `${GAS_URL}?action=emergency&userId=${encodeURIComponent(currentUser.id)}&detail=${encodeURIComponent(detail)}&callback=${callbackName}`;
+            
+            alert("緊急連絡を送信しました。\n（確認のためOKを押してください）");
+            closeEmergencyModal();
+            
+            jsonpRequest(url, callbackName, (result) => {
+                if (result.success) {
+                    console.log("緊急連絡送信成功");
+                } else {
+                    console.error("緊急連絡送信失敗");
+                }
+            });
         }
 
         function updateButtonState() {
