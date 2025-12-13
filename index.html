@@ -15,7 +15,6 @@
         .btn-shine { position: relative; overflow: hidden; }
         .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: rgba(255, 255, 255, 0.4); transform: rotate(45deg); transition: all 0.5s ease; opacity: 0; }
         .btn-shine:hover::after { left: 100%; opacity: 1; transition: all 0.5s ease; }
-        /* プルダウンの矢印を調整 */
         .select-arrow { pointer-events: none; position: absolute; inset-y: 0; right: 0; display: flex; align-items: center; padding-right: 0.75rem; color: #374151; }
     </style>
 </head>
@@ -166,7 +165,6 @@
         const studyPlusLinkBtn = document.getElementById('study-plus-link');
         
         const nextVisitModal = document.getElementById('next-visit-modal');
-        // ★変更: 入力要素ID変更
         const nextVisitDateInput = document.getElementById('next-visit-date');
         const nextVisitHourSelect = document.getElementById('next-visit-hour');
         const nextVisitMinuteSelect = document.getElementById('next-visit-minute');
@@ -175,7 +173,7 @@
         const emergencyDetail = document.getElementById('emergency-detail');
 
         window.addEventListener('load', () => {
-            // ★追加: 時間プルダウンの生成 (9時〜22時)
+            // ★追加: 時間プルダウンの生成 (7時〜22時)
             populateHours();
 
             const urlParams = new URLSearchParams(window.location.search);
@@ -214,10 +212,10 @@
             }
         });
 
-        // ★追加: 9時から22時までの選択肢を作る
+        // ★変更: 7時から22時までの選択肢を作る
         function populateHours() {
             nextVisitHourSelect.innerHTML = '';
-            for (let i = 9; i <= 22; i++) {
+            for (let i = 7; i <= 22; i++) { // 7時から開始
                 const opt = document.createElement('option');
                 opt.value = String(i).padStart(2, '0');
                 opt.textContent = i + '時';
@@ -455,7 +453,6 @@
         }
 
         function submitNextVisit() {
-            // ★変更: 日付と時間を結合して送信
             const dateVal = nextVisitDateInput.value;
             const hourVal = nextVisitHourSelect.value;
             const minuteVal = nextVisitMinuteSelect.value;
