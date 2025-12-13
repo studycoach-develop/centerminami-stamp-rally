@@ -15,6 +15,8 @@
         .btn-shine { position: relative; overflow: hidden; }
         .btn-shine::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: rgba(255, 255, 255, 0.4); transform: rotate(45deg); transition: all 0.5s ease; opacity: 0; }
         .btn-shine:hover::after { left: 100%; opacity: 1; transition: all 0.5s ease; }
+        /* プルダウンの矢印を調整 */
+        .select-arrow { pointer-events: none; position: absolute; inset-y: 0; right: 0; display: flex; align-items: center; padding-right: 0.75rem; color: #374151; }
     </style>
 </head>
 <body class="bg-blue-50 flex items-center justify-center min-h-screen">
@@ -74,8 +76,31 @@
                     <p class="text-gray-600 mb-4 text-sm text-center">次回の登校予定を教えてね<br><span class="text-xs text-blue-500">※明日以降の日付を選択してください</span></p>
                     
                     <div class="mb-6">
-                        <label for="next-visit-input" class="block text-gray-700 text-sm font-bold mb-2">日時選択</label>
-                        <input type="datetime-local" id="next-visit-input" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-gray-50 text-lg">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">日時選択</label>
+                        
+                        <div class="mb-3">
+                            <input type="date" id="next-visit-date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-gray-50 text-lg">
+                        </div>
+
+                        <div class="flex space-x-2">
+                            <div class="relative w-1/2">
+                                <select id="next-visit-hour" class="w-full appearance-none px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-gray-50 text-lg text-center">
+                                    </select>
+                                <div class="select-arrow"><svg class="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg></div>
+                            </div>
+                            <div class="flex items-center text-lg font-bold text-gray-500">:</div>
+                            <div class="relative w-1/2">
+                                <select id="next-visit-minute" class="w-full appearance-none px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 bg-gray-50 text-lg text-center">
+                                    <option value="00">00</option>
+                                    <option value="10">10</option>
+                                    <option value="20">20</option>
+                                    <option value="30">30</option>
+                                    <option value="40">40</option>
+                                    <option value="50">50</option>
+                                </select>
+                                <div class="select-arrow"><svg class="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="flex space-x-3 mb-4">
@@ -141,11 +166,18 @@
         const studyPlusLinkBtn = document.getElementById('study-plus-link');
         
         const nextVisitModal = document.getElementById('next-visit-modal');
-        const nextVisitInput = document.getElementById('next-visit-input');
+        // ★変更: 入力要素ID変更
+        const nextVisitDateInput = document.getElementById('next-visit-date');
+        const nextVisitHourSelect = document.getElementById('next-visit-hour');
+        const nextVisitMinuteSelect = document.getElementById('next-visit-minute');
+
         const emergencyModal = document.getElementById('emergency-modal');
         const emergencyDetail = document.getElementById('emergency-detail');
 
         window.addEventListener('load', () => {
+            // ★追加: 時間プルダウンの生成 (9時〜22時)
+            populateHours();
+
             const urlParams = new URLSearchParams(window.location.search);
             const qrLoginDataStr = urlParams.get('qr_login_data');
 
@@ -181,6 +213,18 @@
                 }
             }
         });
+
+        // ★追加: 9時から22時までの選択肢を作る
+        function populateHours() {
+            nextVisitHourSelect.innerHTML = '';
+            for (let i = 9; i <= 22; i++) {
+                const opt = document.createElement('option');
+                opt.value = String(i).padStart(2, '0');
+                opt.textContent = i + '時';
+                if(i === 17) opt.selected = true; // デフォルト17時
+                nextVisitHourSelect.appendChild(opt);
+            }
+        }
 
         function getDistance(lat1, lng1, lat2, lng2) {
             const R = 6371e3; 
@@ -351,9 +395,6 @@
         function recordAttendance(type) {
             const btn = type === 'toko' ? tokoBtn : gekoBtn;
             
-            // 下校時の位置情報チェックも有効化
-            // if (type === 'geko') { executeAttendance(type, null); return; }
-
             if (!navigator.geolocation) {
                 alert("お使いの端末は位置情報に対応していません。");
                 return;
@@ -392,14 +433,18 @@
 
             if (distance <= ALLOWED_DISTANCE_M) {
                 if (type === 'geko') {
+                    // 下校時：モーダル準備
                     const now = new Date();
                     const tomorrow = new Date(now);
                     tomorrow.setDate(tomorrow.getDate() + 1);
-                    tomorrow.setHours(0, 0, 0, 0);
-                    const offset = tomorrow.getTimezoneOffset() * 60000;
-                    const localTomorrowISO = (new Date(tomorrow.getTime() - offset)).toISOString().slice(0, 16);
-                    nextVisitInput.min = localTomorrowISO;
-                    nextVisitInput.value = ""; 
+                    
+                    // YYYY-MM-DD 形式を取得
+                    const tomorrowStr = tomorrow.getFullYear() + '-' + 
+                                        String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + 
+                                        String(tomorrow.getDate()).padStart(2, '0');
+                    
+                    nextVisitDateInput.min = tomorrowStr;
+                    nextVisitDateInput.value = ""; // リセット
                     nextVisitModal.classList.remove('hidden');
                 } else {
                     executeAttendance('toko', null);
@@ -410,13 +455,24 @@
         }
 
         function submitNextVisit() {
-            const nextVisitVal = nextVisitInput.value;
-            if (nextVisitVal && new Date(nextVisitVal) < new Date(nextVisitInput.min)) {
-                alert("明日以降の日付を選択してください。");
+            // ★変更: 日付と時間を結合して送信
+            const dateVal = nextVisitDateInput.value;
+            const hourVal = nextVisitHourSelect.value;
+            const minuteVal = nextVisitMinuteSelect.value;
+
+            if (!dateVal) {
+                alert("日付を選択してください。");
                 return;
             }
+            if (dateVal < nextVisitDateInput.min) {
+                 alert("明日以降の日付を選択してください。");
+                 return;
+            }
+
+            const fullDateTime = `${dateVal}T${hourVal}:${minuteVal}`;
+            
             nextVisitModal.classList.add('hidden');
-            executeAttendance('geko', nextVisitVal);
+            executeAttendance('geko', fullDateTime);
         }
 
         function submitLineLater() {
