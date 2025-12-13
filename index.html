@@ -42,23 +42,23 @@
                 <p class="text-3xl font-extrabold text-blue-600"><span id="login-count">0</span> 日</p>
             </div>
 
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <button id="toko-btn" onclick="recordAttendance('toko')" class="bg-green-500 text-white font-bold py-4 rounded-lg hover:bg-green-600 transition-all duration-300 transform hover:scale-105 btn-shine disabled:opacity-50 disabled:cursor-not-allowed">登校する</button>
-                <button id="geko-btn" onclick="recordAttendance('geko')" class="bg-orange-500 text-white font-bold py-4 rounded-lg hover:bg-orange-600 transition-all duration-300 transform hover:scale-105 btn-shine disabled:opacity-50 disabled:cursor-not-allowed">下校する</button>
-            </div>
-            
             <div id="announcements-container" class="space-y-3 mb-6">
-            </div>
-            
-            <div class="mt-2 mb-6">
-                <button id="study-plus-link" class="block w-full bg-indigo-500 text-white font-bold py-3 rounded-lg text-center hover:bg-indigo-600 transition-all duration-300 transform hover:scale-105 btn-shine">
-                    Study Plusはこちら
-                </button>
             </div>
 
             <div id="calendar" class="bg-gray-50 p-4 rounded-lg mb-8">
                 <div class="flex justify-between items-center mb-4"><button id="prev-month" class="text-gray-600 hover:text-blue-500">&lt;</button><h3 id="calendar-header" class="text-lg font-bold text-gray-700"></h3><button id="next-month" class="text-gray-600 hover:text-blue-500">&gt;</button></div>
                 <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <button id="toko-btn" onclick="recordAttendance('toko')" class="bg-green-500 text-white font-bold py-4 rounded-lg hover:bg-green-600 transition-all duration-300 transform hover:scale-105 btn-shine disabled:opacity-50 disabled:cursor-not-allowed">登校する</button>
+                <button id="geko-btn" onclick="recordAttendance('geko')" class="bg-orange-500 text-white font-bold py-4 rounded-lg hover:bg-orange-600 transition-all duration-300 transform hover:scale-105 btn-shine disabled:opacity-50 disabled:cursor-not-allowed">下校する</button>
+            </div>
+            
+            <div class="mt-2 mb-8">
+                <button id="study-plus-link" class="block w-full bg-indigo-500 text-white font-bold py-3 rounded-lg text-center hover:bg-indigo-600 transition-all duration-300 transform hover:scale-105 btn-shine">
+                    Study Plusはこちら
+                </button>
             </div>
 
             <div class="border-t-2 border-gray-100 pt-6">
@@ -114,12 +114,11 @@
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbw9Uzp2tnUKpLxUv_8MOBT6cffjCMO91yXL1F3WSRK44DN3BCBY0YiCxpdfrWIgKWOT/exec'; 
         const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error&expires_at=2025-08-10T09%3A10%3A58.934Z';
 
-        // ★ 新機能設定：キャッシュキーと位置情報
         const STORAGE_KEY = 'stamp_rally_user_v1';
         // センター南校（第2フローリッシュビル）
         const SCHOOL_LAT = 35.5462481;
         const SCHOOL_LNG = 139.5737649;
-        const ALLOWED_DISTANCE_M = 150; // 許容半径150m（GPS誤差考慮）
+        const ALLOWED_DISTANCE_M = 150; 
 
         let currentUser = null;
         let currentMonth = new Date();
@@ -129,7 +128,6 @@
         let loginExpiryTimestamp = null;
         let expiryTimer = null;
 
-        // 位置情報管理
         let cachedPosition = null;
         let isLocationReady = false;
 
@@ -151,12 +149,11 @@
             const urlParams = new URLSearchParams(window.location.search);
             const qrLoginDataStr = urlParams.get('qr_login_data');
 
-            // 1. QRログイン優先
             if (qrLoginDataStr) {
                 try {
                     const decodedData = decodeURIComponent(qrLoginDataStr);
                     const result = JSON.parse(decodedData);
-                    showMainScreen(result, false); // QRは最新データなので保存する
+                    showMainScreen(result, false); 
                     window.history.replaceState(null, '', window.location.pathname);
                     return;
                 } catch (e) {
@@ -165,16 +162,14 @@
                 }
             }
 
-            // 2. 自動ログイン判定（キャッシュ確認）
             const savedData = localStorage.getItem(STORAGE_KEY);
             if (savedData) {
                 try {
                     const parsedData = JSON.parse(savedData);
                     const now = new Date().getTime();
-                    // 有効期限チェック（期限切れなら再ログインさせる）
                     if (parsedData.expiryTimestamp && now < parsedData.expiryTimestamp) {
                         console.log("★ 自動ログイン成功 (Cache Hit)");
-                        showMainScreen(parsedData, true); // true = キャッシュ利用
+                        showMainScreen(parsedData, true);
                         return;
                     } else {
                         console.log("セッション期限切れのため自動ログインスキップ");
@@ -187,9 +182,8 @@
             }
         });
 
-        // 距離計算（ハーバーサインの公式）
         function getDistance(lat1, lng1, lat2, lng2) {
-            const R = 6371e3; // 地球の半径 (m)
+            const R = 6371e3; 
             const φ1 = lat1 * Math.PI/180;
             const φ2 = lat2 * Math.PI/180;
             const Δφ = (lat2-lat1) * Math.PI/180;
@@ -201,7 +195,6 @@
             return R * c;
         }
 
-        // 位置情報の先読み開始（ログイン成功後に呼ぶ）
         function startLocationTracking() {
             if (!navigator.geolocation) {
                 console.warn("位置情報非対応端末です");
@@ -212,9 +205,6 @@
                 (position) => {
                     cachedPosition = position;
                     isLocationReady = true;
-                    // デバッグ用: 距離をコンソールに表示
-                    // const dist = getDistance(position.coords.latitude, position.coords.longitude, SCHOOL_LAT, SCHOOL_LNG);
-                    // console.log(`現在地更新: 教室まで約${Math.round(dist)}m`);
                 },
                 (error) => {
                     console.warn("位置情報のバックグラウンド取得に失敗:", error.code);
@@ -235,7 +225,6 @@
             loginScreen.classList.add('hidden');
             mainScreen.classList.remove('hidden');
             
-            // お知らせ表示
             const announcementsContainer = document.getElementById('announcements-container');
             announcementsContainer.innerHTML = ''; 
             if (result.announcements && result.announcements.length > 0) {
@@ -255,14 +244,12 @@
                 startExpiryTimer();
             }
 
-            // ★ キャッシュでなければ保存、キャッシュなら位置情報監視スタート
             if (!isCache) {
                 try {
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
                 } catch(e) { console.error("Storage save error", e); }
             }
 
-            // 画面表示完了したら、即座に位置情報を探しに行く
             startLocationTracking();
 
             updateCalendar();
@@ -307,7 +294,6 @@
             attendanceDates = [];
             hasLeftToday = false;
             
-            // ★ キャッシュ削除
             localStorage.removeItem(STORAGE_KEY);
             cachedPosition = null;
             isLocationReady = false;
@@ -355,18 +341,17 @@
             const url = `${GAS_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&callback=${callbackName}`;
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
-                    showMainScreen(result, false); // 新規ログインなので保存する
+                    showMainScreen(result, false); 
                 } else {
                     loginError.textContent = result.message || 'ログインに失敗しました。';
                 }
             });
         }
 
-        // 登校・下校ボタンクリック時の処理（GPSチェック入り）
         function recordAttendance(type) {
             const btn = type === 'toko' ? tokoBtn : gekoBtn;
             
-            // ※下校時も場所チェックしたい場合はコメントアウトを外す（基本は登校時のみチェックで十分な場合が多いが、要件に合わせて全チェック）
+            // 下校時の位置情報チェックも有効化
             // if (type === 'geko') { executeAttendance(type, null); return; }
 
             if (!navigator.geolocation) {
@@ -374,13 +359,11 @@
                 return;
             }
 
-            // ★ パターンA: 既に裏で位置情報が取れている（爆速）
             if (isLocationReady && cachedPosition) {
                 checkDistanceAndExecute(cachedPosition, type, btn);
                 return;
             }
 
-            // ★ パターンB: まだ取れていない（ここだけ待たせる）
             btn.disabled = true;
             const originalText = btn.textContent;
             btn.textContent = "位置確認中...";
@@ -400,7 +383,6 @@
             );
         }
 
-        // 距離判定と実行の共通ロジック
         function checkDistanceAndExecute(position, type, btn) {
             const currentLat = position.coords.latitude;
             const currentLng = position.coords.longitude;
@@ -409,9 +391,7 @@
             console.log(`教室までの距離: 約${Math.round(distance)}m`);
 
             if (distance <= ALLOWED_DISTANCE_M) {
-                // 距離OKなら実行
                 if (type === 'geko') {
-                    // 下校処理（日時選択へ）
                     const now = new Date();
                     const tomorrow = new Date(now);
                     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -422,7 +402,6 @@
                     nextVisitInput.value = ""; 
                     nextVisitModal.classList.remove('hidden');
                 } else {
-                    // 登校処理
                     executeAttendance('toko', null);
                 }
             } else {
@@ -465,13 +444,8 @@
                     console.log("記録成功: ", type);
                     if (type === 'toko') {
                         attendanceDates = result.attendanceDates;
-                        // ★ 重要：記録成功したらローカルストレージも更新しておく
-                        currentUser.attendanceDates = attendanceDates; // キャッシュ用構造に合わせて適宜調整
-                        // 簡易的に全データ再取得はできないので、今回はリロードを促すか、
-                        // もしくは自動ログインで次回更新されるのを待つ方針とする
-                        // （厳密にするならここで result をマージして setItem する）
+                        currentUser.attendanceDates = attendanceDates; 
                         
-                        // 簡易マージして保存
                         const savedData = localStorage.getItem(STORAGE_KEY);
                         if (savedData) {
                             const data = JSON.parse(savedData);
@@ -480,7 +454,6 @@
                         }
                     } else if (type === 'geko') {
                         hasLeftToday = true;
-                        // 簡易マージして保存
                         const savedData = localStorage.getItem(STORAGE_KEY);
                         if (savedData) {
                             const data = JSON.parse(savedData);
@@ -535,9 +508,9 @@
             const todayStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
             const hasAttendedToday = attendanceDates.includes(todayStr);
             tokoBtn.disabled = hasAttendedToday;
-            tokoBtn.textContent = '登校する'; // 戻す
+            tokoBtn.textContent = '登校する'; 
             gekoBtn.disabled = !hasAttendedToday || hasLeftToday;
-            gekoBtn.textContent = '下校する'; // 戻す
+            gekoBtn.textContent = '下校する'; 
         }
 
         function updateCalendar() {
