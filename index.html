@@ -114,6 +114,13 @@
         const GAS_URL = 'https://script.google.com/macros/s/AKfycbw9Uzp2tnUKpLxUv_8MOBT6cffjCMO91yXL1F3WSRK44DN3BCBY0YiCxpdfrWIgKWOT/exec'; 
         const STUDY_PLUS_BASE_URL = 'https://fs-platform.studyplus.co.jp/auth/student?redirect_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Fenter_exit%2F6dccd60b94&fallback_uri=https%3A%2F%2Fcontents.studyplus.co.jp%2Faccess_error&expires_at=2025-08-10T09%3A10%3A58.934Z';
 
+        // ★ 新機能設定：キャッシュキーと位置情報
+        const STORAGE_KEY = 'stamp_rally_user_v1';
+        // センター南校（第2フローリッシュビル）
+        const SCHOOL_LAT = 35.5462481;
+        const SCHOOL_LNG = 139.5737649;
+        const ALLOWED_DISTANCE_M = 150; // 許容半径150m（GPS誤差考慮）
+
         let currentUser = null;
         let currentMonth = new Date();
         let attendanceDates = [];
@@ -121,6 +128,10 @@
         let lastCheckedDate = null;
         let loginExpiryTimestamp = null;
         let expiryTimer = null;
+
+        // 位置情報管理
+        let cachedPosition = null;
+        let isLocationReady = false;
 
         const loginScreen = document.getElementById('login-screen');
         const mainScreen = document.getElementById('main-screen');
@@ -140,20 +151,80 @@
             const urlParams = new URLSearchParams(window.location.search);
             const qrLoginDataStr = urlParams.get('qr_login_data');
 
+            // 1. QRログイン優先
             if (qrLoginDataStr) {
                 try {
                     const decodedData = decodeURIComponent(qrLoginDataStr);
                     const result = JSON.parse(decodedData);
-                    showMainScreen(result);
+                    showMainScreen(result, false); // QRは最新データなので保存する
                     window.history.replaceState(null, '', window.location.pathname);
+                    return;
                 } catch (e) {
                     console.error("QRログインデータの解析に失敗しました。", e);
                     loginError.textContent = "QRコードのログイン情報が正しくありません。";
                 }
             }
+
+            // 2. 自動ログイン判定（キャッシュ確認）
+            const savedData = localStorage.getItem(STORAGE_KEY);
+            if (savedData) {
+                try {
+                    const parsedData = JSON.parse(savedData);
+                    const now = new Date().getTime();
+                    // 有効期限チェック（期限切れなら再ログインさせる）
+                    if (parsedData.expiryTimestamp && now < parsedData.expiryTimestamp) {
+                        console.log("★ 自動ログイン成功 (Cache Hit)");
+                        showMainScreen(parsedData, true); // true = キャッシュ利用
+                        return;
+                    } else {
+                        console.log("セッション期限切れのため自動ログインスキップ");
+                        localStorage.removeItem(STORAGE_KEY);
+                    }
+                } catch (e) {
+                    console.error("保存データの読み込み失敗", e);
+                    localStorage.removeItem(STORAGE_KEY);
+                }
+            }
         });
 
-        function showMainScreen(result) {
+        // 距離計算（ハーバーサインの公式）
+        function getDistance(lat1, lng1, lat2, lng2) {
+            const R = 6371e3; // 地球の半径 (m)
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lng2-lng1) * Math.PI/180;
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // 位置情報の先読み開始（ログイン成功後に呼ぶ）
+        function startLocationTracking() {
+            if (!navigator.geolocation) {
+                console.warn("位置情報非対応端末です");
+                return;
+            }
+            console.log("位置情報の監視(Preload)を開始します...");
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    cachedPosition = position;
+                    isLocationReady = true;
+                    // デバッグ用: 距離をコンソールに表示
+                    // const dist = getDistance(position.coords.latitude, position.coords.longitude, SCHOOL_LAT, SCHOOL_LNG);
+                    // console.log(`現在地更新: 教室まで約${Math.round(dist)}m`);
+                },
+                (error) => {
+                    console.warn("位置情報のバックグラウンド取得に失敗:", error.code);
+                    isLocationReady = false;
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        }
+
+        function showMainScreen(result, isCache = false) {
             currentUser = result.user;
             attendanceDates = result.attendanceDates || [];
             hasLeftToday = result.hasLeftToday || false;
@@ -164,9 +235,9 @@
             loginScreen.classList.add('hidden');
             mainScreen.classList.remove('hidden');
             
+            // お知らせ表示
             const announcementsContainer = document.getElementById('announcements-container');
             announcementsContainer.innerHTML = ''; 
-
             if (result.announcements && result.announcements.length > 0) {
                 let announcementsHtml = '<h3 class="text-xl font-bold text-gray-800 border-b-2 pb-2 mb-2">📢 お知らせ</h3>';
                 result.announcements.forEach(ann => {
@@ -183,6 +254,16 @@
                 loginExpiryTimestamp = result.expiryTimestamp;
                 startExpiryTimer();
             }
+
+            // ★ キャッシュでなければ保存、キャッシュなら位置情報監視スタート
+            if (!isCache) {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+                } catch(e) { console.error("Storage save error", e); }
+            }
+
+            // 画面表示完了したら、即座に位置情報を探しに行く
+            startLocationTracking();
 
             updateCalendar();
             updateButtonState();
@@ -225,6 +306,12 @@
             currentUser = null;
             attendanceDates = [];
             hasLeftToday = false;
+            
+            // ★ キャッシュ削除
+            localStorage.removeItem(STORAGE_KEY);
+            cachedPosition = null;
+            isLocationReady = false;
+
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
             mainScreen.classList.add('hidden');
@@ -268,30 +355,78 @@
             const url = `${GAS_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&callback=${callbackName}`;
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
-                    showMainScreen(result);
+                    showMainScreen(result, false); // 新規ログインなので保存する
                 } else {
                     loginError.textContent = result.message || 'ログインに失敗しました。';
                 }
             });
         }
 
+        // 登校・下校ボタンクリック時の処理（GPSチェック入り）
         function recordAttendance(type) {
-            if (type === 'geko') {
-                const now = new Date();
-                const tomorrow = new Date(now);
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                // ★ 修正: 明日の「00:00」をセットする (これまでは19:00などが入っていた)
-                tomorrow.setHours(0, 0, 0, 0);
-                
-                const offset = tomorrow.getTimezoneOffset() * 60000;
-                const localTomorrowISO = (new Date(tomorrow.getTime() - offset)).toISOString().slice(0, 16);
-                
-                nextVisitInput.min = localTomorrowISO;
-                nextVisitInput.value = ""; 
-                
-                nextVisitModal.classList.remove('hidden');
+            const btn = type === 'toko' ? tokoBtn : gekoBtn;
+            
+            // ※下校時も場所チェックしたい場合はコメントアウトを外す（基本は登校時のみチェックで十分な場合が多いが、要件に合わせて全チェック）
+            // if (type === 'geko') { executeAttendance(type, null); return; }
+
+            if (!navigator.geolocation) {
+                alert("お使いの端末は位置情報に対応していません。");
+                return;
+            }
+
+            // ★ パターンA: 既に裏で位置情報が取れている（爆速）
+            if (isLocationReady && cachedPosition) {
+                checkDistanceAndExecute(cachedPosition, type, btn);
+                return;
+            }
+
+            // ★ パターンB: まだ取れていない（ここだけ待たせる）
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = "位置確認中...";
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    checkDistanceAndExecute(position, type, btn);
+                },
+                (error) => {
+                    alert("位置情報が取得できませんでした。\n端末の設定で位置情報の利用を許可してください。");
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        // 距離判定と実行の共通ロジック
+        function checkDistanceAndExecute(position, type, btn) {
+            const currentLat = position.coords.latitude;
+            const currentLng = position.coords.longitude;
+            const distance = getDistance(currentLat, currentLng, SCHOOL_LAT, SCHOOL_LNG);
+
+            console.log(`教室までの距離: 約${Math.round(distance)}m`);
+
+            if (distance <= ALLOWED_DISTANCE_M) {
+                // 距離OKなら実行
+                if (type === 'geko') {
+                    // 下校処理（日時選択へ）
+                    const now = new Date();
+                    const tomorrow = new Date(now);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    tomorrow.setHours(0, 0, 0, 0);
+                    const offset = tomorrow.getTimezoneOffset() * 60000;
+                    const localTomorrowISO = (new Date(tomorrow.getTime() - offset)).toISOString().slice(0, 16);
+                    nextVisitInput.min = localTomorrowISO;
+                    nextVisitInput.value = ""; 
+                    nextVisitModal.classList.remove('hidden');
+                } else {
+                    // 登校処理
+                    executeAttendance('toko', null);
+                }
             } else {
-                executeAttendance('toko', null);
+                alert(`教室から離れています（約${Math.round(distance)}m）。\n教室の中で押してください。\n\n※位置情報がずれている場合は、Wi-Fiをオンにすると改善することがあります。`);
             }
         }
 
@@ -327,14 +462,39 @@
 
             jsonpRequest(url, callbackName, (result) => {
                 if (result.success) {
-                    console.log("バックグラウンドでの記録に成功しました: ", type);
+                    console.log("記録成功: ", type);
                     if (type === 'toko') {
                         attendanceDates = result.attendanceDates;
+                        // ★ 重要：記録成功したらローカルストレージも更新しておく
+                        currentUser.attendanceDates = attendanceDates; // キャッシュ用構造に合わせて適宜調整
+                        // 簡易的に全データ再取得はできないので、今回はリロードを促すか、
+                        // もしくは自動ログインで次回更新されるのを待つ方針とする
+                        // （厳密にするならここで result をマージして setItem する）
+                        
+                        // 簡易マージして保存
+                        const savedData = localStorage.getItem(STORAGE_KEY);
+                        if (savedData) {
+                            const data = JSON.parse(savedData);
+                            data.attendanceDates = result.attendanceDates;
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                        }
                     } else if (type === 'geko') {
                         hasLeftToday = true;
+                        // 簡易マージして保存
+                        const savedData = localStorage.getItem(STORAGE_KEY);
+                        if (savedData) {
+                            const data = JSON.parse(savedData);
+                            data.hasLeftToday = true;
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                        }
                     }
+                    updateCalendar();
+                    updateButtonState();
                 } else {
-                    console.error("バックグラウンドでの記録に失敗しました: ", result.message || '記録に失敗しました。');
+                    console.error("記録失敗: ", result.message);
+                    alert(result.message || '記録に失敗しました。');
+                    button.disabled = false;
+                    button.textContent = (type === 'toko' ? '登校する' : '下校する');
                 }
             });
 
@@ -375,7 +535,9 @@
             const todayStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
             const hasAttendedToday = attendanceDates.includes(todayStr);
             tokoBtn.disabled = hasAttendedToday;
+            tokoBtn.textContent = '登校する'; // 戻す
             gekoBtn.disabled = !hasAttendedToday || hasLeftToday;
+            gekoBtn.textContent = '下校する'; // 戻す
         }
 
         function updateCalendar() {
