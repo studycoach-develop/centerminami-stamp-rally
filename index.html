@@ -143,7 +143,10 @@
         const SCHOOL_LAT = 35.5462481;
         const SCHOOL_LNG = 139.5737649;
         const ALLOWED_DISTANCE_M = 150; 
+        const CACHE_VALID_MS = 60000; 
 
+        let currentUser = null;
+        
         let currentUser = null;
         let currentMonth = new Date();
         let attendanceDates = [];
@@ -237,6 +240,48 @@
             return R * c;
         }
 
+        // ★ここから追加：位置情報関連ユーティリティとフォールバックエンジン
+        function getPosition(options) {
+            return new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, options);
+            });
+        }
+
+        async function getLocationWithFallback(btn) {
+            const now = Date.now();
+
+            // 1. 新鮮なキャッシュがあれば即座に返す
+            if (cachedPosition && isLocationReady && (now - cachedPosition.timestamp < CACHE_VALID_MS)) {
+                console.log("新鮮なキャッシュを利用します");
+                return cachedPosition;
+            }
+
+            // 2. 高精度で試行
+            try {
+                if (btn) btn.textContent = "GPSを検索中...";
+                const pos = await getPosition({ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+                cachedPosition = { coords: pos.coords, timestamp: Date.now() }; 
+                isLocationReady = true;
+                return cachedPosition;
+            } catch (error) {
+                console.warn("高精度での取得失敗、Wi-Fi/基地局ベースに切り替えます:", error.message);
+                
+                // 3. 低精度でフォールバック試行
+                try {
+                    if (btn) btn.textContent = "屋内電波を探しています...";
+                    const fallbackPos = await getPosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+                    cachedPosition = { coords: fallbackPos.coords, timestamp: Date.now() };
+                    isLocationReady = true;
+                    return cachedPosition;
+                } catch (fallbackError) {
+                    console.error("低精度での取得も失敗:", fallbackError.message);
+                    throw fallbackError; 
+                }
+            }
+        }
+        // ★追加ここまで
+        
+        // ★元の startLocationTracking() をこれに上書きする
         function startLocationTracking() {
             if (!navigator.geolocation) {
                 console.warn("位置情報非対応端末です");
@@ -245,14 +290,13 @@
             console.log("位置情報の監視(Preload)を開始します...");
             navigator.geolocation.watchPosition(
                 (position) => {
-                    cachedPosition = position;
+                    cachedPosition = { coords: position.coords, timestamp: Date.now() };
                     isLocationReady = true;
                 },
                 (error) => {
-                    console.warn("位置情報のバックグラウンド取得に失敗:", error.code);
-                    isLocationReady = false;
+                    console.warn("バックグラウンド取得エラー(無視して進行可):", error.code);
                 },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 }
             );
         }
 
@@ -390,7 +434,8 @@
             });
         }
 
-        function recordAttendance(type) {
+        // ★元の recordAttendance(type) をこれに上書きする
+        async function recordAttendance(type) {
             const btn = type === 'toko' ? tokoBtn : gekoBtn;
             
             if (!navigator.geolocation) {
@@ -398,28 +443,18 @@
                 return;
             }
 
-            if (isLocationReady && cachedPosition) {
-                checkDistanceAndExecute(cachedPosition, type, btn);
-                return;
-            }
-
             btn.disabled = true;
             const originalText = btn.textContent;
-            btn.textContent = "位置確認中...";
 
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    btn.disabled = false;
-                    btn.textContent = originalText;
-                    checkDistanceAndExecute(position, type, btn);
-                },
-                (error) => {
-                    alert("位置情報が取得できませんでした。\n端末の設定で位置情報の利用を許可してください。");
-                    btn.disabled = false;
-                    btn.textContent = originalText;
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
+            try {
+                const position = await getLocationWithFallback(btn);
+                btn.textContent = originalText;
+                checkDistanceAndExecute(position, type, btn);
+            } catch (error) {
+                alert("位置情報が取得できませんでした。\n\n【対策】\n1. 端末の「位置情報（GPS）」がオンか確認\n2. ブラウザの位置情報許可がオンか確認\n3. Wi-Fiをオンにすると屋内の精度が上がります");
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
         }
 
         function checkDistanceAndExecute(position, type, btn) {
@@ -477,8 +512,10 @@
             executeAttendance('geko', 'LINEで連絡');
         }
 
+        // ★元の closeNextVisitModal() をこれに上書きする
         function closeNextVisitModal() {
             nextVisitModal.classList.add('hidden');
+            gekoBtn.disabled = false; // ★この1行を追加
         }
 
         function executeAttendance(type, nextVisitDate) {
